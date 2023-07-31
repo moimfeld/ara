@@ -3,9 +3,13 @@
 
 #if defined(DEBUG)
 #define DEBUG_PRINTF(formatstring, ...) \
-            { printf("DEBUG: " formatstring, __VA_ARGS__); }
+        printf("DEBUG: " formatstring, __VA_ARGS__);
+
+#define DEBUG_PRINTF_NOARGS(formatstring) \
+        printf("DEBUG: " formatstring);
 #else
 #define DEBUG_PRINTF(formatstring, ...) {}
+#define DEBUG_PRINTF_NOARGS(formatstring) {}
 #endif
 
 #endif

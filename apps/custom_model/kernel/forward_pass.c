@@ -19,6 +19,7 @@
  */
 
 #include "forward_pass.h"
+#include "custom_model_helper.h"
 #include "custom_model_macros.h"
 #include "nn_functions.h"
 #include <stdint.h>
@@ -218,6 +219,8 @@ uint8_t conv_model_forward(float * input)
             conv_0_bias,
             input,
             output_conv0);
+
+    DEBUG_PRINTF_NOARGS("conv_model_forward: First conv done\n");
     float_relu(26*26,
                output_conv0,
                output_relu0);
@@ -228,6 +231,7 @@ uint8_t conv_model_forward(float * input)
             conv_1_bias,
             output_relu0,
             output_conv1);
+    DEBUG_PRINTF_NOARGS("conv_model_forward: Second conv done\n");
     float_relu(24*24,
                output_conv1,
                output_relu1);
@@ -238,6 +242,19 @@ uint8_t conv_model_forward(float * input)
             conv_2_bias,
             output_relu1,
             output_conv2);
+    DEBUG_PRINTF_NOARGS("conv_model_forward: Third conv done\n");
+
+    #if defined(DEBUG)
+    for (uint32_t i = 0; i < 22; i++) {
+        for (uint32_t j = 0; j < 22; j++) {
+            char resultStr[8];
+            getFloatUpTo5thDecimal(output_conv2[i * 26 + j], resultStr);
+            printf("%s ", resultStr);
+        }
+        printf("\n");
+    }
+    #endif
+
     float_relu(22*22,
                output_conv2,
                output_relu2);
@@ -247,6 +264,14 @@ uint8_t conv_model_forward(float * input)
                           dense_0_bias,
                           output_relu2,
                           output);
+
+    #if defined(DEBUG)
+    for (uint32_t i = 0; i < 10; i++) {
+        char resultStr[8];
+        getFloatUpTo5thDecimal(output[i], resultStr);
+        printf("Formatted result: %s\n", resultStr);
+    }
+    #endif
 
     uint32_t argmax = float_argmax(10, output);
     return argmax;
