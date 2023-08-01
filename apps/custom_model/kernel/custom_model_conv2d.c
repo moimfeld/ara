@@ -7,10 +7,15 @@
 
 // R is Rows (H_in)
 // C is Column (W_in)
-// W is Channels (C_in)
+// W is number of Channels (C_in)
 // F is Filter (F)
 
-void fconv2d_tensor32_vec_6xC_3x3(float *o, float *i, float *f, int64_t R, int64_t C, int64_t W, int64_t F)
+// o is output
+// i is input
+// f is filter
+// b is bias
+
+void fconv2d_tensor32_vec_6xC_3x3(float *o, float *i, float *f, float b, int64_t R, int64_t C, int64_t W, int64_t F)
 {
 	
 int64_t const ldo = (C - 2) << 2;
@@ -349,13 +354,14 @@ for (int c = 0 ; c < (C - 2) ; c += TILE_SIZE_OUT) // IF CONVOLUTION NEED TO BE 
 
 			i__ = i_ + r * C;
 			f_ = f;
-		  	
-		asm volatile("vse32.v v0, (%0); add %0, %0, %1" : "+&r"(o_) : "r"(ldo));
-		asm volatile("vse32.v v2, (%0); add %0, %0, %1" : "+&r"(o_) : "r"(ldo));
-		asm volatile("vse32.v v4, (%0); add %0, %0, %1" : "+&r"(o_) : "r"(ldo));
-		asm volatile("vse32.v v6, (%0); add %0, %0, %1" : "+&r"(o_) : "r"(ldo));
-		asm volatile("vse32.v v8, (%0); add %0, %0, %1" : "+&r"(o_) : "r"(ldo));
-		asm volatile("vse32.v v10, (%0); add %0, %0, %1" : "+&r"(o_) : "r"(ldo));
+		
+		// asm volatile("vfadd.vf v0, v0, %0"::"f"(b));
+		asm volatile("vfadd.vf v0, v0, %2; vse32.v v0, (%0); add %0, %0, %1" : "+&r"(o_) : "r"(ldo), "f"(b));
+		asm volatile("vfadd.vf v2, v2, %2; vse32.v v2, (%0); add %0, %0, %1" : "+&r"(o_) : "r"(ldo), "f"(b));
+		asm volatile("vfadd.vf v4, v4, %2; vse32.v v4, (%0); add %0, %0, %1" : "+&r"(o_) : "r"(ldo), "f"(b));
+		asm volatile("vfadd.vf v6, v6, %2; vse32.v v6, (%0); add %0, %0, %1" : "+&r"(o_) : "r"(ldo), "f"(b));
+		asm volatile("vfadd.vf v8, v8, %2; vse32.v v8, (%0); add %0, %0, %1" : "+&r"(o_) : "r"(ldo), "f"(b));
+		asm volatile("vfadd.vf v10, v10, %2; vse32.v v10, (%0); add %0, %0, %1" : "+&r"(o_) : "r"(ldo), "f"(b));
 
 		asm volatile("vmv.v.v v0, v12");
 		asm volatile("vmv.v.v v2, v14");
@@ -604,47 +610,47 @@ for (int c = 0 ; c < (C - 2) ; c += TILE_SIZE_OUT) // IF CONVOLUTION NEED TO BE 
 
 	if (last_group == 0)
 	{
-	asm volatile("vse32.v v0, (%0); add %0, %0, %1" : "+&r"(o_) : "r"(ldo));
-	asm volatile("vse32.v v2, (%0); add %0, %0, %1" : "+&r"(o_) : "r"(ldo));
-	asm volatile("vse32.v v4, (%0); add %0, %0, %1" : "+&r"(o_) : "r"(ldo));
-	asm volatile("vse32.v v6, (%0); add %0, %0, %1" : "+&r"(o_) : "r"(ldo));
-	asm volatile("vse32.v v8, (%0); add %0, %0, %1" : "+&r"(o_) : "r"(ldo));
-	asm volatile("vse32.v v10, (%0)" : "+&r"(o_));
+	asm volatile("vfadd.vf v0, v0, %2; vse32.v v0, (%0); add %0, %0, %1" : "+&r"(o_) : "r"(ldo), "f"(b));
+	asm volatile("vfadd.vf v2, v2, %2; vse32.v v2, (%0); add %0, %0, %1" : "+&r"(o_) : "r"(ldo), "f"(b));
+	asm volatile("vfadd.vf v4, v4, %2; vse32.v v4, (%0); add %0, %0, %1" : "+&r"(o_) : "r"(ldo), "f"(b));
+	asm volatile("vfadd.vf v6, v6, %2; vse32.v v6, (%0); add %0, %0, %1" : "+&r"(o_) : "r"(ldo), "f"(b));
+	asm volatile("vfadd.vf v8, v8, %2; vse32.v v8, (%0); add %0, %0, %1" : "+&r"(o_) : "r"(ldo), "f"(b));
+	asm volatile("vfadd.vf v10, v10, %1; vse32.v v10, (%0)" : "+&r"(o_) : "f"(b));
 
 	}
 	else if (last_group == 5)
 	{
-	asm volatile("vse32.v v0, (%0); add %0, %0, %1" : "+&r"(o_) : "r"(ldo));
-	asm volatile("vse32.v v2, (%0); add %0, %0, %1" : "+&r"(o_) : "r"(ldo));
-	asm volatile("vse32.v v4, (%0); add %0, %0, %1" : "+&r"(o_) : "r"(ldo));
-	asm volatile("vse32.v v6, (%0); add %0, %0, %1" : "+&r"(o_) : "r"(ldo));
-	asm volatile("vse32.v v8, (%0)" : "+&r"(o_));
+	asm volatile("vfadd.vf v0, v0, %2; vse32.v v0, (%0); add %0, %0, %1" : "+&r"(o_) : "r"(ldo), "f"(b));
+	asm volatile("vfadd.vf v2, v2, %2; vse32.v v2, (%0); add %0, %0, %1" : "+&r"(o_) : "r"(ldo), "f"(b));
+	asm volatile("vfadd.vf v4, v4, %2; vse32.v v4, (%0); add %0, %0, %1" : "+&r"(o_) : "r"(ldo), "f"(b));
+	asm volatile("vfadd.vf v6, v6, %2; vse32.v v6, (%0); add %0, %0, %1" : "+&r"(o_) : "r"(ldo), "f"(b));
+	asm volatile("vfadd.vf v8, v8, %1; vse32.v v8, (%0)" : "+&r"(o_) : "f"(b));
 
 	}
 	else if (last_group == 4)
 	{
-	asm volatile("vse32.v v0, (%0); add %0, %0, %1" : "+&r"(o_) : "r"(ldo));
-	asm volatile("vse32.v v2, (%0); add %0, %0, %1" : "+&r"(o_) : "r"(ldo));
-	asm volatile("vse32.v v4, (%0); add %0, %0, %1" : "+&r"(o_) : "r"(ldo));
-	asm volatile("vse32.v v6, (%0)" : "+&r"(o_));
+	asm volatile("vfadd.vf v0, v0, %2; vse32.v v0, (%0); add %0, %0, %1" : "+&r"(o_) : "r"(ldo), "f"(b));
+	asm volatile("vfadd.vf v2, v2, %2; vse32.v v2, (%0); add %0, %0, %1" : "+&r"(o_) : "r"(ldo), "f"(b));
+	asm volatile("vfadd.vf v4, v4, %2; vse32.v v4, (%0); add %0, %0, %1" : "+&r"(o_) : "r"(ldo), "f"(b));
+	asm volatile("vfadd.vf v6, v6, %1; vse32.v v6, (%0)" : "+&r"(o_) : "f"(b));
 
 	}
 	else if (last_group == 3)
 	{
-	asm volatile("vse32.v v0, (%0); add %0, %0, %1" : "+&r"(o_) : "r"(ldo));
-	asm volatile("vse32.v v2, (%0); add %0, %0, %1" : "+&r"(o_) : "r"(ldo));
-	asm volatile("vse32.v v4, (%0)" : "+&r"(o_));
+	asm volatile("vfadd.vf v0, v0, %2; vse32.v v0, (%0); add %0, %0, %1" : "+&r"(o_) : "r"(ldo), "f"(b));
+	asm volatile("vfadd.vf v2, v2, %2; vse32.v v2, (%0); add %0, %0, %1" : "+&r"(o_) : "r"(ldo), "f"(b));
+	asm volatile("vfadd.vf v4, v4, %1; vse32.v v4, (%0)" : "+&r"(o_) : "f"(b));
 
 	}
 	else if (last_group == 2)
 	{
-	asm volatile("vse32.v v0, (%0); add %0, %0, %1" : "+&r"(o_) : "r"(ldo));
-	asm volatile("vse32.v v2, (%0)" : "+&r"(o_));
+	asm volatile("vfadd.vf v0, v0, %2; vse32.v v0, (%0); add %0, %0, %1" : "+&r"(o_) : "r"(ldo), "f"(b));
+	asm volatile("vfadd.vf v2, v2, %1; vse32.v v2, (%0)" : "+&r"(o_) : "f"(b));
 
 	}
 	else
 	{
-	asm volatile("vse32.v v0, (%0)" : "+&r"(o_));
+	asm volatile("vfadd.vf v0, v0, %1; vse32.v v0, (%0)" : "+&r"(o_) : "f"(b));
 
 	}
 	}

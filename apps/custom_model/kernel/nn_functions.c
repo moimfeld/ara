@@ -58,7 +58,7 @@ int8_t conv_2d(const uint32_t img_n_rows,
 {
     // VECTORIZED CODE
     #if defined(USE_VEXT)
-    fconv2d_tensor32_vec_6xC_3x3(output, input, filter, img_n_rows, img_n_columns, 1, filter_size);
+    fconv2d_tensor32_vec_6xC_3x3(output, input, filter, bias[0], img_n_rows, img_n_columns, 1, filter_size); // only one input channel at the moment --> else change second last argument and pass bias accordingly
     #else
     // reference kernel
     for (uint32_t img_row = 0; img_row < img_n_rows - 2; img_row++) {
