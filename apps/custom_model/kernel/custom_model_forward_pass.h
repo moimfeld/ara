@@ -10,6 +10,7 @@ uint8_t tiny_fc_model_forward(float * input);
 uint8_t fc_model_forward(float * input);
 uint8_t conv_model_forward(float * input);
 uint8_t conv_pool_model_forward(float * input);
+uint8_t conv_pad_model_forward(float * input);
 
 
 
