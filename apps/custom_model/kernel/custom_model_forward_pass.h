@@ -1,5 +1,5 @@
-#ifndef _FORWARD_PASS_H_
-#define _FORWARD_PASS_H_
+#ifndef _CUSTOM_MODEL_FORWARD_PASS_H_
+#define _CUSTOM_MODEL_FORWARD_PASS_H_
 
 #include <stdint.h>
 #if defined(USE_VEXT)

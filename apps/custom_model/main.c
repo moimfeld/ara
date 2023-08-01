@@ -9,7 +9,7 @@
 // -D USE_VECT enables vectorized kernels
 
 
-#include "kernel/forward_pass.h"
+#include "kernel/custom_model_forward_pass.h"
 #include "kernel/images_labels.h"
 #include <stdint.h>
 #include <string.h>

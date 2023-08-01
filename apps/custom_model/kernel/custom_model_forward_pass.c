@@ -18,7 +18,8 @@
  * Modifications copyright (C) 2021-2022 Chair of Electronic Design Automation, TUM
  */
 
-#include "forward_pass.h"
+#include "custom_model_forward_pass.h"
+#include "custom_model_relu.h"
 #include "custom_model_helper.h"
 #include "custom_model_macros.h"
 #include "nn_functions.h"
