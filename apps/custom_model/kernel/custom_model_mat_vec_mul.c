@@ -1,6 +1,7 @@
 #include <riscv_vector.h>
 #include "custom_model_mat_vec_mul.h"
 #include "custom_model_macros.h"
+#include "stdio.h"
 
 void slow_mat_vec_mul(const uint32_t n_rows,
                         const uint32_t n_columns,

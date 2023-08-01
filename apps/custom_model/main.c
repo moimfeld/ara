@@ -34,6 +34,9 @@ int main() {
   #elif defined(CONV_MODEL)
   printf("Evaluating CONV_MODEL\n");
   argmax = conv_model_forward(simplenet_inputs[0]);
+  #elif defined(CONV_POOL_MODEL)
+  printf("Evaluating CONV_POOL_MODEL\n");
+  argmax = conv_pool_model_forward(simplenet_inputs[0]);
   #elif defined(RESNET)
   #error Not Implemented :(
   #else

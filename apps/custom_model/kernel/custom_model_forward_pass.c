@@ -20,6 +20,7 @@
 
 #include "custom_model_forward_pass.h"
 #include "custom_model_relu.h"
+#include "custom_model_max_pool.h"
 #include "custom_model_helper.h"
 #include "custom_model_macros.h"
 #include "nn_functions.h"
@@ -37,10 +38,13 @@
 #elif defined(CONV_MODEL)
 #include "conv_model.h"
 #include "images_labels.h"
+#elif defined(CONV_POOL_MODEL)
+#include "conv_pool_model.h"
+#include "images_labels.h"
 #elif defined(RESNET)
 #error Not Implemented :(
 #else
-#warning No model defined, defaulting to TINY_FC_MODEL. Use "-D <MODEL_NAME>" to define a model (Possible models TINY_FC_MODEL, FC_MODEL, CONV_MODEL, RESNET)
+#warning No model defined, defaulting to TINY_FC_MODEL. Use "-D <MODEL_NAME>" to define a model (Possible models TINY_FC_MODEL, FC_MODEL, CONV_MODEL, CONV_POOL_MODEL, RESNET)
 #include "tiny_fc_model.h"
 #include "images_labels.h"
 #endif
@@ -264,6 +268,76 @@ uint8_t conv_model_forward(float * input)
                           dense_0_weight,
                           dense_0_bias,
                           output_relu2,
+                          output);
+
+    #if defined(DEBUG)
+    for (uint32_t i = 0; i < 10; i++) {
+        char resultStr[8];
+        getFloatUpTo5thDecimal(output[i], resultStr);
+        printf("Formatted result: %s\n", resultStr);
+    }
+    #endif
+
+    uint32_t argmax = float_argmax(10, output);
+    return argmax;
+}
+#endif
+
+#if defined(CONV_POOL_MODEL)
+uint8_t conv_pool_model_forward(float * input)
+{
+    float output_conv0[26*26];
+    float output_relu0[26*26];
+    float output_conv1[24*24];
+    float output_relu1[24*24];
+    float output_maxPool[12*12];
+    float output[10];
+
+    conv_2d(28,
+            28,
+            conv_0_weight_rows,
+            conv_0_weight,
+            conv_0_bias,
+            input,
+            output_conv0);
+
+    DEBUG_PRINTF_NOARGS("conv_model_forward: First conv done\n");
+    float_relu(26*26,
+               output_conv0,
+               output_relu0);
+    conv_2d(26,
+            26,
+            conv_1_weight_rows,
+            conv_1_weight,
+            conv_1_bias,
+            output_relu0,
+            output_conv1);
+    DEBUG_PRINTF_NOARGS("conv_model_forward: Second conv done\n");
+    float_relu(24*24,
+               output_conv1,
+               output_relu1);
+
+    #if defined(DEBUG)
+    for (uint32_t i = 0; i < 24; i++) {
+        for (uint32_t j = 0; j < 24; j++) {
+            char resultStr[8];
+            getFloatUpTo5thDecimal(output_relu1[i * 24 + j], resultStr);
+            printf("%s ", resultStr);
+        }
+        printf("\n");
+    }
+    #endif
+
+
+    // output, input, rows, columns, channels, pool window size, stride
+    fmax_pool_vec_1xC_2x2(output_maxPool, output_relu1, 24, 24, 1, 2, 2);
+
+
+    float_mat_vec_product(dense_0_weight_rows,
+                          dense_0_weight_columns,
+                          dense_0_weight,
+                          dense_0_bias,
+                          output_maxPool,
                           output);
 
     #if defined(DEBUG)
