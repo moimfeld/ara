@@ -20,7 +20,7 @@ void slow_mat_vec_mul(const uint32_t n_rows,
         // Initialization
         uint32_t remaining_columns = n_columns;
         acc_vec = vfsub_vv_f32m8(acc_vec, acc_vec, vl_max);
-        res_vec = vfsub_vv_f32m1(res_vec, res_vec, 1);
+        res_vec = vfsub_vv_f32m1(res_vec, res_vec, vl_max);
         float * i_ptr = input;
 
         // Vectorized Multiplication loop
