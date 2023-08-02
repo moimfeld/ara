@@ -44,6 +44,16 @@ int main() {
   // }
   // return 0;
 
+  #if defined(MEASURE)
+  printf("Measuring enabled\n");
+  #endif
+
+  #if defined(USE_VEXT)
+  printf("Using vectorized kernels\n");
+  #else
+  printf("Using scalar kernels\n");
+  #endif
+
   uint8_t argmax;
   #if defined(TINY_FC_MODEL)
   printf("Evaluating TINY_FC_MODEL\n");
