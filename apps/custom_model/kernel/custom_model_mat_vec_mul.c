@@ -106,7 +106,7 @@ void mat_vec_mul_n_columns_smaller_vl_max(const uint32_t n_rows,
         asm volatile("vse32.v v0, (%0)"::"r"(&output[i]));
 
         // Add bias
-        output[i] = res + bias[i];
+        output[i] += bias[i];
     }
     return;
 }
