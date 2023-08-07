@@ -97,13 +97,13 @@ void mat_vec_mul_n_columns_smaller_vl_max(const uint32_t n_rows,
         asm volatile("vfredusum.vs v0, v16, v0");
 
         // store result in output buffer
-        // asm volatile("vfmv.f.s %0, v0" : "=f"(output[i])); // CANNOT USE MOVE.....
+        asm volatile("vfmv.f.s %0, v0" : "=f"(output[i])); // USABLE NOW (on verilator) :)
         
         // Adjust vl for bias addition
-        asm volatile("vsetivli zero, 1, e32, m1, ta, ma");
+        // asm volatile("vsetivli zero, 1, e32, m1, ta, ma");
 
         // Store result
-        asm volatile("vse32.v v0, (%0)"::"r"(&output[i]));
+        // asm volatile("vse32.v v0, (%0)"::"r"(&output[i]));
 
         // Add bias
         output[i] += bias[i];
