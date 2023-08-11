@@ -76,6 +76,11 @@ void mat_vec_mul_n_columns_smaller_vl_max(const uint32_t n_rows,
     asm volatile("vle32.v v8, (%0)" ::"r"(input)); // load input once
     // inp_vec = vle32_v_f32m8(input, vl);
 
+    // start VCD_DUMP
+    #if defined(VCD_DUMP)
+    event_trigger = +1;
+    #endif
+
     for (uint32_t i = 0; i < n_rows; i++) {
         // FOR TESTING
         asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) :"r"(n_columns));
@@ -108,5 +113,10 @@ void mat_vec_mul_n_columns_smaller_vl_max(const uint32_t n_rows,
         // Add bias
         output[i] += bias[i];
     }
+    // stop VCD_DUMP
+    #if defined(VCD_DUMP)
+    event_trigger = -1;
+    #endif
+
     return;
 }

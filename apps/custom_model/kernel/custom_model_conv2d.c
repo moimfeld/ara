@@ -24,6 +24,10 @@ int64_t const ldi = C << 2;
 int64_t vlen;
 
 int64_t const last_group = (R - F + 1) % block_size_3x3;
+// start VCD_DUMP
+#if defined(VCD_DUMP)
+event_trigger = +1;
+#endif
 
 for (int c = 0 ; c < (C - 2) ; c += TILE_SIZE_OUT) // IF CONVOLUTION NEED TO BE TILED (C > TILE_SIZE)
 {
@@ -654,4 +658,8 @@ for (int c = 0 ; c < (C - 2) ; c += TILE_SIZE_OUT) // IF CONVOLUTION NEED TO BE 
 
 	}
 	}
+	// stop VCD_DUMP
+    #if defined(VCD_DUMP)
+    event_trigger = -1;
+    #endif
 }

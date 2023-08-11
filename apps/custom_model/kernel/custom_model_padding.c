@@ -9,6 +9,10 @@ void float_zero_pad(float *output, float *input, uint64_t i_rows, uint64_t i_col
 
     vfloat32m8_t res_vec;
 
+    // start VCD_DUMP
+    #if defined(VCD_DUMP)
+    event_trigger = +1;
+    #endif
 
     // top row padding
     for (uint32_t i = 0; i < pad; i++) {
@@ -77,4 +81,8 @@ void float_zero_pad(float *output, float *input, uint64_t i_rows, uint64_t i_col
             output += cols;
         }
     }
+    // stop VCD_DUMP
+    #if defined(VCD_DUMP)
+    event_trigger = -1;
+    #endif
 }

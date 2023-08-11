@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+extern int64_t event_trigger;
+
 
 // First version of matrix-vector multiplication
 //

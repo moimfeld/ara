@@ -4,6 +4,8 @@
 #include <stdint.h>
 
 
+extern int64_t event_trigger;
+
 // idea: pad at top and bottom with empty vectors
 //       slide vectors to pad left side of vectors
 //       scalar instructions to pad right side

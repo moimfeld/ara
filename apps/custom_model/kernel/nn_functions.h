@@ -2,6 +2,10 @@
 #define _NN_FUNCTIONS_H_
 
 #include <stdint.h>
+#include "custom_model_relu.h"
+#include "custom_model_max_pool.h"
+#include "custom_model_padding.h"
+
 
 int8_t float_mat_vec_product(const uint32_t n_rows,
                              const uint32_t n_columns,

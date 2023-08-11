@@ -19,15 +19,14 @@
  */
 
 #include "custom_model_forward_pass.h"
-#include "custom_model_relu.h"
-#include "custom_model_max_pool.h"
-#include "custom_model_padding.h"
 #include "custom_model_helper.h"
 #include "custom_model_macros.h"
 #include "nn_functions.h"
 #include <stdint.h>
 #include "util.h"
+#ifndef VCD_DUMP
 #include "runtime.h"
+#endif
 
 
 #if defined(TINY_FC_MODEL)

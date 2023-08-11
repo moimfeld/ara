@@ -4,11 +4,18 @@
 #include <stdint.h>
 #include <riscv_vector.h>
 
+extern int64_t event_trigger;
+
 // Inline functions
 __attribute__((always_inline)) static int8_t float_relu(const uint32_t len,
                                                         float         *input,
                                                         float         *output)
 {
+    // start VCD_DUMP
+    #if defined(VCD_DUMP)
+    event_trigger = +1;
+    #endif
+
     #if defined(USE_VEXT)
     // Initialize
     uint32_t remaining_columns = len;
@@ -35,8 +42,13 @@ __attribute__((always_inline)) static int8_t float_relu(const uint32_t len,
         output[i] = (input[i] > 0.0) ? input[i] : 0.0;
     }
     #endif
+
+    // stop VCD_DUMP
+    #if defined(VCD_DUMP)
+    event_trigger = -1;
+    #endif
+
     return 0;
 }
-
 
 #endif

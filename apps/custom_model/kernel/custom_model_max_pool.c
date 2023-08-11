@@ -26,6 +26,11 @@ void fmax_pool_vec_1xC_2x2(float *o, float *i, int64_t R, int64_t C, int64_t W, 
 		float * i_ = i + c; 			// input pointer realtive to the tile (constant throughout the tile)
 		float * o_ = o + (c >> 1);			// output pointer relative to the tile	
 		
+		// start VCD_DUMP
+		#if defined(VCD_DUMP)
+		event_trigger = +1;
+		#endif
+
 		//channel and height loop are fused to avoid branches
 		for (int r = 0 ; r < R * W ; r += block_size_2x2){
 			
@@ -50,5 +55,10 @@ void fmax_pool_vec_1xC_2x2(float *o, float *i, int64_t R, int64_t C, int64_t W, 
 			o_ += C >> 1;
 	  	 
   		}
+
+		// stop VCD_DUMP
+		#if defined(VCD_DUMP)
+		event_trigger = -1;
+		#endif
   	}
 }
