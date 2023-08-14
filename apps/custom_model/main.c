@@ -20,6 +20,7 @@
 // #include "kernel/custom_model_padding.h"
 // #include "kernel/custom_model_helper.h"
 #include "kernel/images_labels.h"
+#include "kernel/images_lables_cifar10.h"
 #include <stdint.h>
 #include <string.h>
 
@@ -66,8 +67,8 @@ int main() {
     #elif defined(CONV_PAD_MODEL)
     printf("Evaluating CONV_PAD_MODEL\n");
     argmax = conv_pad_model_forward(simplenet_inputs[0]);
-    #elif defined(RESNET)
-    #error Not Implemented :(
+    #elif defined(CIFAR10_CONV_RES_MODEL)
+    argmax = conv_pool_res_model_forward(cifar10_inputs[0]);
     #else
     #warning No model defined, defaulting to TINY_FC_MODEL. Use "-D <MODEL_NAME>" to define a model (Possible models TINY_FC_MODEL, FC_MODEL, CONV_MODEL, CONV_POOL_MODEL, CONV_PAD_MODEL, RESNET)
     printf("No model defined at compile time, defaulting to TINY_FC_MODEL. Use '-D <MODEL_NAME>' to define a model (Possible models TINY_FC_MODEL, FC_MODEL, CONV_MODEL, CONV_POOL_MODEL, CONV_PAD_MODEL, RESNET)\n");
@@ -75,7 +76,7 @@ int main() {
     #endif
 
     printf("Prediction: %0d\n", argmax);
-    printf("Correct Label: %0d\n", simplenet_labels[0]);
+    printf("Correct Label: %0d\n", cifar10_inputs[0]);
     return 0;
   #endif
 }

@@ -11,6 +11,7 @@ uint8_t fc_model_forward(float * input);
 uint8_t conv_model_forward(float * input);
 uint8_t conv_pool_model_forward(float * input);
 uint8_t conv_pad_model_forward(float * input);
+uint8_t conv_pool_res_model_forward(float * input);
 
 
 

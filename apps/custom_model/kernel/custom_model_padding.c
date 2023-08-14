@@ -1,10 +1,15 @@
 #include "custom_model_padding.h"
 #include <riscv_vector.h>
-#include "stdio.h"
+#ifndef SPIKE
+#include "printf.h"
+#else
+#include <stdio.h>
+#endif
 
 
 // STRIPMINING IS NOT TESTED!!!!!!!! (works 100% if i_columns < (vl_max - 2*pad))
 void float_zero_pad(float *output, float *input, uint64_t i_rows, uint64_t i_columns, uint64_t pad){
+    #if defined(USE_VEXT)
     uint32_t o_rows = i_rows + 2*pad;
 
     vfloat32m8_t res_vec;
@@ -84,5 +89,16 @@ void float_zero_pad(float *output, float *input, uint64_t i_rows, uint64_t i_col
     // stop VCD_DUMP
     #if defined(VCD_DUMP)
     event_trigger = -1;
+    #endif
+    #else
+    for (uint32_t i = 0; i < i_rows + 2*pad; i++) {
+        for (uint32_t j = 0; j < i_columns + 2*pad; j++) {
+            if (i == 0 || i == i_rows-1 || j == 0 || j == i_columns-1) {
+                output[i * (i_rows + 2*pad) + j] = 0;
+            } else {
+                output[i * (i_rows + 2*pad) + j] = input[(i-1) * (i_rows) + (j-1)];
+            }
+        }
+    }
     #endif
 }

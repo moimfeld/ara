@@ -12,7 +12,7 @@
 // F  : size of the filter
 
 void fmax_pool_vec_1xC_2x2(float *o, float *i, int64_t R, int64_t C, int64_t W, int64_t F, int64_t stride) {
-
+	#if defined(USE_VEXT)
 	int64_t ld = stride << 2;
 	
 	// vsetvli C (in order to load everything)
@@ -61,4 +61,21 @@ void fmax_pool_vec_1xC_2x2(float *o, float *i, int64_t R, int64_t C, int64_t W, 
 		event_trigger = -1;
 		#endif
   	}
+	#else
+		for (uint32_t k = 0; k < R/2; k += 1) {
+			for (uint32_t j = 0; j < C/2; j += 1) {
+				o[k*(R/2) + j] = i[2*k*R + 2*j];
+				if (o[k*(R/2) + j] < i[2*k*R + R + 2*j]) {
+					o[k*(R/2) + j] = i[2*k*R + R + 2*j];
+				}
+				if (o[k*(R/2) + j] < i[2*k*R + 2*j+1]) {
+					o[k*(R/2) + j] = i[2*k*R + 2*j+1];
+				}
+				if (o[k*(R/2) + j] < i[2*k*R + R + 2*j+1]) {
+					o[k*(R/2) + j] = i[2*k*R + R + 2*j+1];
+				}
+			}
+		}
+	#endif
+
 }

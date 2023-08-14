@@ -19,14 +19,16 @@
  */
 
 #include "custom_model_forward_pass.h"
+#include "custom_model_relu.h"
+#include "custom_model_max_pool.h"
+#include "custom_model_padding.h"
+#include "custom_model_resid_add.h"
 #include "custom_model_helper.h"
 #include "custom_model_macros.h"
 #include "nn_functions.h"
 #include <stdint.h>
 #include "util.h"
-#ifndef VCD_DUMP
 #include "runtime.h"
-#endif
 
 
 #if defined(TINY_FC_MODEL)
@@ -44,8 +46,9 @@
 #elif defined(CONV_PAD_MODEL)
 #include "conv_pad_model.h"
 #include "images_labels.h"
-#elif defined(RESNET)
-#error Not Implemented :(
+#elif defined(CIFAR10_CONV_RES_MODEL)
+#include "cifar10_conv_res_model.h"
+#include "images_lables_cifar10.h"
 #else
 #warning No model defined, defaulting to TINY_FC_MODEL. Use "-D <MODEL_NAME>" to define a model (Possible models TINY_FC_MODEL, FC_MODEL, CONV_MODEL, CONV_POOL_MODEL, CONV_PAD_MODEL, RESNET)
 #include "tiny_fc_model.h"
@@ -452,6 +455,8 @@ uint8_t conv_model_forward(float * input)
     conv_2d(28,
             28,
             conv_0_weight_rows,
+            1,
+            1,
             conv_0_weight,
             conv_0_bias,
             input,
@@ -481,6 +486,8 @@ uint8_t conv_model_forward(float * input)
     conv_2d(26,
             26,
             conv_1_weight_rows,
+            1,
+            1,
             conv_1_weight,
             conv_1_bias,
             output_relu0,
@@ -510,6 +517,8 @@ uint8_t conv_model_forward(float * input)
     conv_2d(24,
             24,
             conv_2_weight_rows,
+            1,
+            1,
             conv_2_weight,
             conv_2_bias,
             output_relu1,
@@ -639,6 +648,8 @@ uint8_t conv_pool_model_forward(float * input)
     conv_2d(28,
             28,
             conv_0_weight_rows,
+            1,
+            1,
             conv_0_weight,
             conv_0_bias,
             input,
@@ -667,6 +678,8 @@ uint8_t conv_pool_model_forward(float * input)
     conv_2d(26,
             26,
             conv_1_weight_rows,
+            1,
+            1,
             conv_1_weight,
             conv_1_bias,
             output_relu0,
@@ -838,6 +851,8 @@ uint8_t conv_pad_model_forward(float * input)
     conv_2d(30,
             30,
             conv_0_weight_rows,
+            1,
+            1,
             conv_0_weight,
             conv_0_bias,
             output_pad0,
@@ -887,6 +902,8 @@ uint8_t conv_pad_model_forward(float * input)
     conv_2d(30,
             30,
             conv_1_weight_rows,
+            1,
+            1,
             conv_1_weight,
             conv_1_bias,
             output_relu0,
@@ -925,6 +942,8 @@ uint8_t conv_pad_model_forward(float * input)
     conv_2d(30,
             30,
             conv_2_weight_rows,
+            1,
+            1,
             conv_2_weight,
             conv_2_bias,
             output_relu1,
@@ -984,4 +1003,154 @@ uint8_t conv_pad_model_forward(float * input)
 
     return argmax;
 }
+
+#endif
+
+
+#if defined(CIFAR10_CONV_RES_MODEL)
+// TODO write function
+uint8_t conv_pool_res_model_forward(float * input)  {
+    // layer dimenstions: 32*32*3 = 3072
+    // before conv0 and after pool: 34*34*16 = 18.496
+    // before conv1 and after pool: 34*34*16 = 18.496
+    // before conv2 and after pool: 34*34*16 = 18.496
+    // before conv3 and after pool: 34*34*32 = 36.992
+    // before conv4 and after pool: 34*34*32 = 36.992
+    // before conv5 and after pool: 34*34*32 = 36.992
+    // after maxpool: 16*16*32 = 8.192
+
+float * small_buf0[32*32*16];
+
+    printf("Measuring input_channel = 3\n");
+    #if defined(MEASURE)
+    start_timer();
+    #endif
+    conv_2d(32, 32, 3, 3, 1, conv_0_weight, conv_0_bias, input, small_buf0);
+    #if defined(MEASURE)
+    stop_timer();
+    int64_t cycles = get_timer();
+    printf("MEASUREMENT: Conv2d 32x32x3 -> 32x32x1 finished after %0d cycles\n", cycles);
+    #endif
+    printf("Measuring input_channel = 16\n");
+    #if defined(MEASURE)
+    start_timer();
+    #endif
+    conv_2d(32, 32, 3, 16, 1, conv_1_weight, conv_0_bias, small_buf0, small_buf0);
+    #if defined(MEASURE)
+    stop_timer();
+    cycles = get_timer();
+    printf("MEASUREMENT: Conv2d 32x32x16 -> 32x32x1 finished after %0d cycles\n", cycles);
+    #endif
+    printf("Measuring input_channel = 32\n");
+    #if defined(MEASURE)
+    start_timer();
+    #endif
+    conv_2d(32, 32, 3, 32, 1, conv_1_weight, conv_0_bias, small_buf0, small_buf0);
+    #if defined(MEASURE)
+    stop_timer();
+    cycles = get_timer();
+    printf("MEASUREMENT: Conv2d 32x32x32 -> 32x32x1 finished after %0d cycles\n", cycles);
+    #endif
+
+    // relu 30x30x2
+    // printf("Measuring float_relu = 30x30x2\n");
+    // #if defined(MEASURE)
+    // start_timer();
+    // #endif
+    // float_relu(30*30*2, small_buf0, small_buf0);
+    // #if defined(MEASURE)
+    // stop_timer();
+    // int64_t cycles = get_timer();
+    // printf("MEASUREMENT: ReLU with dim=%0d finished after %0d cycles\n", 30*30*2, cycles);
+    // #endif
+
+    // relu 30x30x32
+    // printf("Measuring float_relu: 30x30x32\n");
+    // #if defined(MEASURE)
+    // start_timer();
+    // #endif
+    // float_relu(30*30*32, small_buf0, small_buf0);
+    // #if defined(MEASURE)
+    // stop_timer();
+    // int64_t cycles = get_timer();
+    // printf("MEASUREMENT: ReLU with dim=%0d finished after %0d cycles\n", 30*30*32, cycles);
+    // #endif
+
+    // relu 30x30x16
+    // printf("Measuring float_relu: 30x30x16\n");
+    // #if defined(MEASURE)
+    // start_timer();
+    // #endif
+    // float_relu(30*30*16, small_buf0, small_buf0);
+    // #if defined(MEASURE)
+    // stop_timer();
+    // cycles = get_timer();
+    // printf("MEASUREMENT: ReLU with dim=%0d finished after %0d cycles\n", 30*30*16, cycles);
+    // #endif
+
+    // zero_pad 
+    // printf("Measuring zero_pad: 30x30 to 32x32\n");
+    // #if defined(MEASURE)
+    // start_timer();
+    // #endif
+    // float_zero_pad(small_buf0, small_buf0, 32, 32, 1);
+    // #if defined(MEASURE)
+    // stop_timer();
+    // int64_t cycles = get_timer();
+    // printf("MEASUREMENT: zero_pad with dim=32x32 pad=1 finished after %0d cycles\n", cycles);
+    // #endif
+
+    // max pool 
+    // printf("Measuring max_pool: 30x30 to 15x15\n");
+    // #if defined(MEASURE)
+    // start_timer();
+    // #endif
+    // fmax_pool_vec_1xC_2x2(small_buf0, small_buf0, 30, 30, 1, 2, 2);
+    // #if defined(MEASURE)
+    // stop_timer();
+    // int64_t cycles = get_timer();
+    // printf("MEASUREMENT: max_pool with dim=30x30 to 15x15 finished after %0d cycles\n", cycles);
+    // #endif
+
+    // resid add 30x30x16
+    // printf("Measuring residual_add: 30x30x16\n");
+    // #if defined(MEASURE)
+    // start_timer();
+    // #endif
+    // float_resid_add(small_buf0, small_buf0, small_buf0, 30*30*16);
+    // #if defined(MEASURE)
+    // stop_timer();
+    // int64_t cycles = get_timer();
+    // printf("MEASUREMENT: resid_add with dim=30x30x16 finished after %0d cycles\n", cycles);
+    // #endif
+
+    // resid add 30x30x32
+    // printf("Measuring residual_add: 30x30x32\n");
+    // #if defined(MEASURE)
+    // start_timer();
+    // #endif
+    // float_resid_add(small_buf0, small_buf0, small_buf0, 30*30*32);
+    // #if defined(MEASURE)
+    // stop_timer();
+    // cycles = get_timer();
+    // printf("MEASUREMENT: resid_add with dim=30x30x32 finished after %0d cycles\n", cycles);
+    // #endif
+
+    // mat vec 8192 to 10
+    // printf("Measuring mat_vec: 8192 to 10\n");
+    // #if defined(MEASURE)
+    // start_timer();
+    // #endif
+    // float_mat_vec_product(10, 8192, small_buf0, small_buf0, small_buf0, small_buf0);
+    // #if defined(MEASURE)
+    // stop_timer();
+    // int64_t cycles = get_timer();
+    // printf("MEASUREMENT: mat vec with 8192 to 10 finished after %0d cycles\n", cycles);
+    // #endif
+
+    // printf("finished here\n");
+    return 9;
+
+}
+
 #endif

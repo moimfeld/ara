@@ -1,7 +1,11 @@
 #ifndef _CUSTOM_MODEL_HELPER_H_
 #define _CUSTOM_MODEL_HELPER_H_
 
+#ifndef SPIKE
+#include "printf.h"
+#else
 #include <stdio.h>
+#endif
 void getFloatUpTo5thDecimal(float num, char resultStr[8]) {
     // Convert float to integer by multiplying by 100000
     int64_t integerPart = (int64_t)num;

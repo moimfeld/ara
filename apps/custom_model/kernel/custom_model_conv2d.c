@@ -1,5 +1,5 @@
 #include "custom_model_conv2d.h"
-
+// #include "stdio.h"
 #define next_plane_(a) ((R - a + 1)*C) << 2
 
 #define block_size_3x3 6
@@ -23,7 +23,9 @@ int64_t const ldi = C << 2;
 
 int64_t vlen;
 
-int64_t const last_group = (R - F + 1) % block_size_3x3;
+int64_t last_group = (R - F + 1) % block_size_3x3;
+// printf("reaching this: %0d\n", );
+
 // start VCD_DUMP
 #if defined(VCD_DUMP)
 event_trigger = +1;
@@ -31,6 +33,7 @@ event_trigger = +1;
 
 for (int c = 0 ; c < (C - 2) ; c += TILE_SIZE_OUT) // IF CONVOLUTION NEED TO BE TILED (C > TILE_SIZE)
 {
+	// printf("tile: %0d\n", c);
 
 	
 	float *f_ = f;

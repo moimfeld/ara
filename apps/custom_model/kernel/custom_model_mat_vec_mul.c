@@ -71,52 +71,53 @@ void mat_vec_mul_n_columns_smaller_vl_max(const uint32_t n_rows,
     float * w_ptr = (float * ) weights;
     size_t vl;
     asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) :"r"(n_columns));
+    uint64_t remaining_columns = n_columns;
+    float res;
 
-    // loading the input vector only once
-    asm volatile("vle32.v v8, (%0)" ::"r"(input)); // load input once
-    // inp_vec = vle32_v_f32m8(input, vl);
+    while(remaining_columns > 0){
 
-    // start VCD_DUMP
-    #if defined(VCD_DUMP)
-    event_trigger = +1;
-    #endif
+        // loading the input vector only once
+        asm volatile("vle32.v v8, (%0)" ::"r"(input)); // load input once
 
-    for (uint32_t i = 0; i < n_rows; i++) {
-        // FOR TESTING
-        asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) :"r"(n_columns));
+        // start VCD_DUMP
+        #if defined(VCD_DUMP)
+        event_trigger = +1;
+        #endif
+        float * w_ptr_ = w_ptr;
+        for (uint32_t i = 0; i < n_rows; i++) {
+            // FOR TESTING
+            asm volatile("vsetvli %0, %1, e32, m2, ta, ma" : "=r"(vl) :"r"(remaining_columns));
 
-        DEBUG_PRINTF("mat_vec_mul_n_columns_smaller_vl_max: Starting to process %0dth row\n", i)
-         // load weights
-        asm volatile("vle32.v v16, (%0)" :: "r"(w_ptr));
+            DEBUG_PRINTF("mat_vec_mul_n_columns_smaller_vl_max: Starting to process %0dth row\n", i)
+            // load weights
+            asm volatile("vle32.v v16, (%0)" :: "r"(w_ptr));
 
-         // init result vector to 0
-        asm volatile("vmv.s.x v0, x0");
+            // init result vector to 0
+            asm volatile("vmv.s.x v0, x0");
 
-        // computation
-        asm volatile("vfmul.vv v16, v16, v8");
+            // computation
+            asm volatile("vfmul.vv v16, v16, v8");
 
-        // Updating pointers
+            // Updating pointers
+            w_ptr_ += n_columns;
+
+            // Sum up multiplications
+            asm volatile("vfredusum.vs v0, v16, v0");
+
+            // store result in output buffer
+            asm volatile("vfmv.f.s %0, v0" : "=f"(res)); // USABLE NOW (on verilator) :)
+            
+            // Adjust vl for bias addition
+            // asm volatile("vsetivli zero, 1, e32, m1, ta, ma");
+
+            // Store result
+            // asm volatile("vse32.v v0, (%0)"::"r"(&output[i]));
+
+            // Add bias
+            output[i] += res;
+        }
         w_ptr += vl;
-
-        // Sum up multiplications
-        asm volatile("vfredusum.vs v0, v16, v0");
-
-        // store result in output buffer
-        asm volatile("vfmv.f.s %0, v0" : "=f"(output[i])); // USABLE NOW (on verilator) :)
-        
-        // Adjust vl for bias addition
-        // asm volatile("vsetivli zero, 1, e32, m1, ta, ma");
-
-        // Store result
-        // asm volatile("vse32.v v0, (%0)"::"r"(&output[i]));
-
-        // Add bias
-        output[i] += bias[i];
-    }
-    // stop VCD_DUMP
-    #if defined(VCD_DUMP)
-    event_trigger = -1;
-    #endif
-
+        remaining_columns -= vl;
+    } 
     return;
 }
