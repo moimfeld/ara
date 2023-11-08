@@ -306,7 +306,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
   localparam int MAX_W_CPOP_VFIRST = (W_CPOP > W_VFIRST) ? W_CPOP : W_VFIRST;
   localparam int N_SLICES_CPOP   = NrLanes * DataWidth / W_CPOP;
   localparam int N_SLICES_VFIRST = NrLanes * DataWidth / W_VFIRST;
-  // Check if parameter is withing range
+  // Check if parameters are within range
   if (((W_CPOP & (W_CPOP - 1)) != 0) || (W_CPOP < 64)) begin
     $fatal(1, "Parameter W_CPOP must be power of 2.");
   end else if (((W_VFIRST & (W_VFIRST - 1)) != 0) || (W_VFIRST < 64)) begin
@@ -343,7 +343,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
   // counter to keep track of how many slices of the vcpop_operand have been processed
   logic [$clog2(MAX_W_CPOP_VFIRST):0] vcpop_slice_cnt_d, vcpop_slice_cnt_q;
   logic [W_CPOP-1:0]                  vcpop_slice;
-  logic [W_VFIRST:0]                  vfirst_slice;
+  logic [W_VFIRST-1:0]                vfirst_slice;
 
   // keep track if first 1 mask element was found
   logic vfirst_found;
