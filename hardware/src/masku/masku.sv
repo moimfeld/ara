@@ -75,6 +75,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
   // Insn-queue related signal
   pe_req_t vinsn_issue;
 
+  // Control flow for mask operands
   for (genvar lane = 0; lane < NrLanes; lane++) begin: gen_unpack_masku_operands
     assign masku_operand_a_valid_i[lane] = masku_operand_valid_i[lane][2 + masku_operand_fu];
     for (genvar operand_fu = 0; operand_fu < NrMaskFUnits; operand_fu++) begin: gen_masku_operand_ready
@@ -88,17 +89,24 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
     assign masku_operand_ready_o[lane][0] = masku_operand_m_ready_o[lane];
   end: gen_unpack_masku_operands
 
+  logic  [NrLanes*ELEN-1:0]              bit_enable_shuffle;
+  logic  [NrLanes*ELEN-1:0]              bit_enable_mask;
+
+  // Performs all shuffling and deshuffling of mask operands (including masks for mask instructions)
   masku_operands #(
     .NrLanes ( NrLanes )
   ) i_masku_operands (
     // Control logic
-    .masku_fu_i        ( masku_operand_fu ),
+    .masku_fu_i             (   masku_operand_fu ),
+    .vinsn_issue_i          (        vinsn_issue ),
     // Operands coming from lanes
-    .masku_operands_i  ( masku_operand_i  ),
+    .masku_operands_i       (    masku_operand_i ),
     // Operands prepared for mask unit execution
-    .masku_operand_a_o ( masku_operand_a  ),
-    .masku_operand_b_o ( masku_operand_b  ),
-    .masku_operand_m_o ( masku_operand_m  )
+    .masku_operand_a_o      (    masku_operand_a ),
+    .masku_operand_b_o      (    masku_operand_b ),
+    .masku_operand_m_o      (    masku_operand_m ),
+    .bit_enable_mask_o      (    bit_enable_mask ),
+    .shuffled_vl_bit_mask_o ( bit_enable_shuffle )
   );
 
 
@@ -325,10 +333,6 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
   end
 
   elen_t [NrLanes-1:0]                   alu_result;
-  logic  [NrLanes*ELEN-1:0]              bit_enable;
-  logic  [NrLanes*ELEN-1:0]              bit_enable_shuffle;
-  logic  [NrLanes*ELEN-1:0]              bit_enable_mask;
-  rvv_pkg::vew_e                         bit_enable_shuffle_eew;
   logic  [NrLanes*ELEN-1:0]              mask;
   logic  [NrLanes*ELEN-1:0]              vcpop_operand;
   logic  [$clog2(W_VFIRST):0]            popcount;
@@ -383,9 +387,6 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
 
   always_comb begin: p_mask_alu
     alu_result          = '0;
-    bit_enable          = '0;
-    bit_enable_shuffle  = '0;
-    bit_enable_mask     = '0;
     not_found_one_d     = pe_req_ready_o ? 1'b1 : not_found_one_q;
     alu_result_vm       = '0;
     alu_result_vm_m     = '0;
@@ -396,40 +397,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
     masku_operand_vd    = '0;
     vcpop_operand       = '0;
 
-    // Comparisons work on vtype.vsew from VALU or VMFPU
-    bit_enable_shuffle_eew = vinsn_issue.op inside {[VMFEQ:VMSGTU], [VMSGT:VMSBC]}
-                           ? vinsn_issue.vtype.vsew
-                           : vinsn_issue.eew_vd_op;
-
     if (vinsn_issue_valid) begin
-      // Calculate bit enable
-      // The result can be taken either from the result of an operation (mask_operand_a_i), or
-      // from the previous value of the destination register (mask_operand_b_i). Byte strobes
-      // do not work here, since this has to be done at a bit granularity. Therefore, the Mask Unit
-      // received both operands, and does a masking depending on the value of the vl.
-      if (vinsn_issue.vl >= ELEN*NrLanes)
-        bit_enable = '1;
-      else begin
-        bit_enable[vinsn_issue.vl] = 1'b1;
-        bit_enable                 = bit_enable - 1;
-      end
-
-      // Shuffle the bit enable signal
-      for (int b = 0; b < NrLanes*StrbWidth; b++) begin
-        automatic int vrf_byte              = shuffle_index(b, NrLanes, bit_enable_shuffle_eew);
-        bit_enable_shuffle[8*vrf_byte +: 8] = bit_enable[8*b +: 8];
-
-        // Take the mask into account
-        if (!vinsn_issue.vm) begin
-          automatic int mask_byte          = shuffle_index(b, NrLanes, vinsn_issue.eew_vmask);
-          automatic int mask_byte_lane     = mask_byte[idx_width(StrbWidth) +: idx_width(NrLanes)];
-          automatic int mask_byte_offset   = mask_byte[idx_width(StrbWidth)-1:0];
-          bit_enable_mask[8*vrf_byte +: 8] = bit_enable_shuffle[8*vrf_byte +: 8] &
-            masku_operand_m[mask_byte_lane][8*mask_byte_offset +: 8];
-        end else begin
-          bit_enable_mask[8*vrf_byte +: 8] = bit_enable_shuffle[8*vrf_byte +: 8];
-        end
-      end
 
       alu_operand_a = masku_operand_a;
       alu_operand_b = masku_operand_b;
