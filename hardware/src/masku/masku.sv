@@ -58,17 +58,17 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
   masku_fu_e masku_operand_fu;
 
   // ALU/FPU result
-  elen_t [NrLanes-1:0] masku_operand_a_i;
+  elen_t [NrLanes-1:0] masku_operand_a;
   logic  [NrLanes-1:0] masku_operand_a_valid_i;
   logic  [NrLanes-1:0] masku_operand_a_ready_o;
 
   // Previous value of the destination vector register
-  elen_t [NrLanes-1:0] masku_operand_b_i;
+  elen_t [NrLanes-1:0] masku_operand_b;
   logic  [NrLanes-1:0] masku_operand_b_valid_i;
   logic  [NrLanes-1:0] masku_operand_b_ready_o;
 
   // Mask
-  elen_t [NrLanes-1:0] masku_operand_m_i;
+  elen_t [NrLanes-1:0] masku_operand_m;
   logic  [NrLanes-1:0] masku_operand_m_valid_i;
   logic  [NrLanes-1:0] masku_operand_m_ready_o;
 
@@ -76,20 +76,31 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
   pe_req_t vinsn_issue;
 
   for (genvar lane = 0; lane < NrLanes; lane++) begin: gen_unpack_masku_operands
-    assign masku_operand_a_i[lane]       = masku_operand_i[lane][2 + masku_operand_fu];
     assign masku_operand_a_valid_i[lane] = masku_operand_valid_i[lane][2 + masku_operand_fu];
     for (genvar operand_fu = 0; operand_fu < NrMaskFUnits; operand_fu++) begin: gen_masku_operand_ready
       assign masku_operand_ready_o[lane][2 + operand_fu] = (masku_fu_e'(operand_fu) == masku_operand_fu) && masku_operand_a_ready_o[lane];
     end: gen_masku_operand_ready
 
-    assign masku_operand_b_i[lane]        = masku_operand_i[lane][1];
     assign masku_operand_b_valid_i[lane]  = (vinsn_issue.op inside {[VMSBF:VID]}) ? '1 : masku_operand_valid_i[lane][1];
     assign masku_operand_ready_o[lane][1] = masku_operand_b_ready_o[lane];
 
-    assign masku_operand_m_i[lane]        = masku_operand_i[lane][0];
     assign masku_operand_m_valid_i[lane]  = masku_operand_valid_i[lane][0];
     assign masku_operand_ready_o[lane][0] = masku_operand_m_ready_o[lane];
   end: gen_unpack_masku_operands
+
+  masku_operands #(
+    .NrLanes ( NrLanes )
+  ) i_masku_operands (
+    // Control logic
+    .masku_fu_i        ( masku_operand_fu ),
+    // Operands coming from lanes
+    .masku_operands_i  ( masku_operand_i  ),
+    // Operands prepared for mask unit execution
+    .masku_operand_a_o ( masku_operand_a  ),
+    .masku_operand_b_o ( masku_operand_b  ),
+    .masku_operand_m_o ( masku_operand_m  )
+  );
+
 
   ////////////////////////////////
   //  Vector instruction queue  //
@@ -414,14 +425,14 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
           automatic int mask_byte_lane     = mask_byte[idx_width(StrbWidth) +: idx_width(NrLanes)];
           automatic int mask_byte_offset   = mask_byte[idx_width(StrbWidth)-1:0];
           bit_enable_mask[8*vrf_byte +: 8] = bit_enable_shuffle[8*vrf_byte +: 8] &
-            masku_operand_m_i[mask_byte_lane][8*mask_byte_offset +: 8];
+            masku_operand_m[mask_byte_lane][8*mask_byte_offset +: 8];
         end else begin
           bit_enable_mask[8*vrf_byte +: 8] = bit_enable_shuffle[8*vrf_byte +: 8];
         end
       end
 
-      alu_operand_a = masku_operand_a_i;
-      alu_operand_b = masku_operand_b_i;
+      alu_operand_a = masku_operand_a;
+      alu_operand_b = masku_operand_b;
 
       // Deshuffle the operands for the mask instructions
       for (int b = 0; b < (NrLanes*StrbWidth); b++) begin
@@ -452,8 +463,8 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
 
       // Evaluate the instruction
       unique case (vinsn_issue.op) inside
-        [VMANDNOT:VMXNOR]: alu_result = (masku_operand_a_i & bit_enable_mask) |
-          (masku_operand_b_i & ~bit_enable_mask);
+        [VMANDNOT:VMXNOR]: alu_result = (masku_operand_a & bit_enable_mask) |
+          (masku_operand_b & ~bit_enable_mask);
         [VMFEQ:VMSGTU], [VMSGT:VMSBC] : begin
           automatic logic [ELEN*NrLanes-1:0] alu_result_flat = '0;
 
@@ -471,9 +482,9 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
                 automatic int dest_byte     = shuffle_index(dest_byte_seq, NrLanes, EW8);
 
                 alu_result_flat[StrbWidth*dest_byte + dest_bit_seq[idx_width(StrbWidth)-1:0]] =
-                (!vinsn_issue.vm && !masku_operand_a_i[src_byte_lane][8*src_byte_offset+1]) ?
-                masku_operand_b_i[src_byte_lane][8*src_byte_offset] :
-                masku_operand_a_i[src_byte_lane][8*src_byte_offset];
+                (!vinsn_issue.vm && !masku_operand_a[src_byte_lane][8*src_byte_offset+1]) ?
+                masku_operand_b[src_byte_lane][8*src_byte_offset] :
+                masku_operand_a[src_byte_lane][8*src_byte_offset];
               end
             EW16: for (int b = 0; b < 4*NrLanes; b++) begin
                 // Shuffle the source byte, then find the lane and the offset of this byte in the
@@ -488,9 +499,9 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
                 automatic int dest_byte     = shuffle_index(dest_byte_seq, NrLanes, EW16);
 
                 alu_result_flat[StrbWidth*dest_byte + dest_bit_seq[idx_width(StrbWidth)-1:0]] =
-                (!vinsn_issue.vm && !masku_operand_a_i[src_byte_lane][8*src_byte_offset+1]) ?
-                masku_operand_b_i[src_byte_lane][8*src_byte_offset] :
-                masku_operand_a_i[src_byte_lane][8*src_byte_offset];
+                (!vinsn_issue.vm && !masku_operand_a[src_byte_lane][8*src_byte_offset+1]) ?
+                masku_operand_b[src_byte_lane][8*src_byte_offset] :
+                masku_operand_a[src_byte_lane][8*src_byte_offset];
               end
             EW32: for (int b = 0; b < 2*NrLanes; b++) begin
                 // Shuffle the source byte, then find the lane and the offset of this byte in the
@@ -505,9 +516,9 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
                 automatic int dest_byte     = shuffle_index(dest_byte_seq, NrLanes, EW32);
 
                 alu_result_flat[StrbWidth*dest_byte + dest_bit_seq[idx_width(StrbWidth)-1:0]] =
-                (!vinsn_issue.vm && !masku_operand_a_i[src_byte_lane][8*src_byte_offset+1]) ?
-                masku_operand_b_i[src_byte_lane][8*src_byte_offset] :
-                masku_operand_a_i[src_byte_lane][8*src_byte_offset];
+                (!vinsn_issue.vm && !masku_operand_a[src_byte_lane][8*src_byte_offset+1]) ?
+                masku_operand_b[src_byte_lane][8*src_byte_offset] :
+                masku_operand_a[src_byte_lane][8*src_byte_offset];
               end
             EW64: for (int b = 0; b < 1*NrLanes; b++) begin
                 // Shuffle the source byte, then find the lane and the offset of this byte in the
@@ -522,16 +533,16 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
                 automatic int dest_byte     = shuffle_index(dest_byte_seq, NrLanes, EW64);
 
                 alu_result_flat[StrbWidth*dest_byte + dest_bit_seq[idx_width(StrbWidth)-1:0]] =
-                  (!vinsn_issue.vm && !masku_operand_a_i[src_byte_lane][8*src_byte_offset+1]) ?
-                  masku_operand_b_i[src_byte_lane][8*src_byte_offset] :
-                  masku_operand_a_i[src_byte_lane][8*src_byte_offset];
+                  (!vinsn_issue.vm && !masku_operand_a[src_byte_lane][8*src_byte_offset+1]) ?
+                  masku_operand_b[src_byte_lane][8*src_byte_offset] :
+                  masku_operand_a[src_byte_lane][8*src_byte_offset];
               end
             default:;
           endcase
 
           // Final assignment
           alu_result = (alu_result_flat & bit_enable_shuffle) |
-            (masku_operand_b_i & ~bit_enable_shuffle);
+            (masku_operand_b & ~bit_enable_shuffle);
         end
         [VMSBF:VMSIF] : begin
             if (&masku_operand_a_valid_i) begin
@@ -631,7 +642,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
           end
         end
         [VCPOP:VFIRST] : begin
-          vcpop_operand = (!vinsn_issue.vm) ? masku_operand_a_i & bit_enable_mask : masku_operand_a_i;
+          vcpop_operand = (!vinsn_issue.vm) ? masku_operand_a & bit_enable_mask : masku_operand_a;
         end
         default: begin
           alu_result    = '0;
@@ -773,7 +784,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
 
           // Copy the mask operand
           mask_queue_d[mask_queue_write_pnt_q][vrf_lane][vrf_offset] =
-            masku_operand_m_i[mask_lane][mask_offset];
+            masku_operand_m[mask_lane][mask_offset];
         end
 
         // Account for the used operands
