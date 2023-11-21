@@ -141,9 +141,9 @@ module ara import ara_pkg::*; #(
   logic pe_scalar_resp_ready;
 
   // Mask unit operands
-  elen_t     [NrLanes-1:0][NrMaskFUnits+2-1:0] masku_operand;
-  logic      [NrLanes-1:0][NrMaskFUnits+2-1:0] masku_operand_valid;
-  logic      [NrLanes-1:0][NrMaskFUnits+2-1:0] masku_operand_ready_masku, masku_operand_ready_lane;
+  elen_t     [NrLanes-1:0][NrMaskFUnits+3-1:0] masku_operand;
+  logic      [NrLanes-1:0][NrMaskFUnits+3-1:0] masku_operand_valid;
+  logic      [NrLanes-1:0][NrMaskFUnits+3-1:0] masku_operand_ready_masku, masku_operand_ready_lane;
   strb_t     [NrLanes-1:0]                     mask;
   logic      [NrLanes-1:0]                     mask_valid;
   logic                                        mask_valid_lane;
