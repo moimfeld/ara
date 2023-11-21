@@ -79,9 +79,9 @@ module lane import ara_pkg::*; import rvv_pkg::*; #(
     output logic                                           ldu_result_gnt_o,
     output logic                                           ldu_result_final_gnt_o,
     // Interface with the Mask unit
-    output `STRUCT_VECT(elen_t, [NrMaskFUnits+2-1:0])      mask_operand_o,
-    output logic                [NrMaskFUnits+2-1:0]       mask_operand_valid_o,
-    input  logic                [NrMaskFUnits+2-1:0]       mask_operand_ready_i,
+    output `STRUCT_VECT(elen_t, [NrMaskFUnits+3-1:0])      mask_operand_o, // NrMaskFUnits + 3 because the mask unit needs to access the results from functional units and vs1, vs2 and v0.m 
+    output logic                [NrMaskFUnits+3-1:0]       mask_operand_valid_o,
+    input  logic                [NrMaskFUnits+3-1:0]       mask_operand_ready_i,
     input  logic                                           masku_result_req_i,
     input  vid_t                                           masku_result_id_i,
     input  vaddr_t                                         masku_result_addr_i,
@@ -338,9 +338,9 @@ module lane import ara_pkg::*; import rvv_pkg::*; #(
     .sldu_operand_ready_i             (sldu_operand_opqueues_ready        ),
     .addrgen_operand_ready_i          (addrgen_operand_ready_i            ),
     // Mask Unit
-    .mask_operand_o                   (mask_operand_o[1:0]                ),
-    .mask_operand_valid_o             (mask_operand_valid_o[1:0]          ),
-    .mask_operand_ready_i             (mask_operand_ready_i[1:0]          )
+    .mask_operand_o                   (mask_operand_o[2:0]                ),
+    .mask_operand_valid_o             (mask_operand_valid_o[2:0]          ),
+    .mask_operand_ready_i             (mask_operand_ready_i[2:0]          )
   );
 
   ///////////////////////////////
@@ -411,9 +411,9 @@ module lane import ara_pkg::*; import rvv_pkg::*; #(
     .mfpu_operand_valid_i (mfpu_operand_valid                     ),
     .mfpu_operand_ready_o (mfpu_operand_ready                     ),
     // Interface with the Mask unit
-    .mask_operand_o       (mask_operand_o[2 +: NrMaskFUnits]      ),
-    .mask_operand_valid_o (mask_operand_valid_o[2 +: NrMaskFUnits]),
-    .mask_operand_ready_i (mask_operand_ready_i[2 +: NrMaskFUnits]),
+    .mask_operand_o       (mask_operand_o[3 +: NrMaskFUnits]      ),
+    .mask_operand_valid_o (mask_operand_valid_o[3 +: NrMaskFUnits]),
+    .mask_operand_ready_i (mask_operand_ready_i[3 +: NrMaskFUnits]),
     .mask_i               (mask                                   ),
     .mask_valid_i         (mask_valid                             ),
     .mask_ready_o         (mask_ready                             )

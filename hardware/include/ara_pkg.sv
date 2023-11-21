@@ -144,6 +144,8 @@ package ara_pkg;
     VMADC, VMSBC,
     // Mask operations
     VMANDNOT, VMAND, VMOR, VMXOR, VMORNOT, VMNAND, VMNOR, VMXNOR,
+    // Gather and compress
+    VCOMPRESS,
     // Scalar moves from VRF
     VMVXS, VFMVFS,
     // Slide instructions
@@ -968,9 +970,9 @@ package ara_pkg;
   ////////////////////////
 
   // There are seven operand queues, serving operands to the different functional units of each lane
-  localparam int unsigned NrOperandQueues = 9;
+  localparam int unsigned NrOperandQueues = 10;
   typedef enum logic [$clog2(NrOperandQueues)-1:0] {
-    AluA, AluB, MulFPUA, MulFPUB, MulFPUC, MaskB, MaskM, StA, SlideAddrGenA
+    AluA, AluB, MulFPUA, MulFPUB, MulFPUC, MaskA, MaskB, MaskM, StA, SlideAddrGenA
   } opqueue_e;
 
   // Each lane has eight VRF banks

@@ -712,6 +712,26 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
           operand_request_i[MulFPUB].vl = vfu_operation_d.vl;
           operand_request_push[MulFPUB] = pe_req.use_vs2 && pe_req.op inside {[VMFEQ:VMFGE]};
 
+
+          // Request for vs1 operand (going to mask unit)
+          operand_request_i[MaskA] = '{
+            id      : pe_req.id,
+            vs      : pe_req.vs1,
+            eew     : pe_req.eew_vs1,
+            scale_vl: pe_req.scale_vl,
+            vtype   : pe_req.vtype,
+            // Since this request goes outside of the lane, we might need to request an
+            // extra operand regardless of whether it is valid in this lane or not.
+            vl      : (pe_req.vl / NrLanes / ELEN) << (int'(EW64) - int'(pe_req.vtype.vsew)),
+            vstart  : vfu_operation_d.vstart,
+            hazard  : pe_req.hazard_vs1 | pe_req.hazard_vd,
+            default : '0
+          };
+          if (((pe_req.vl / NrLanes / ELEN) * NrLanes * ELEN) !=
+            pe_req.vl) operand_request_i[MaskA].vl += 1;
+          operand_request_push[MaskA] = pe_req.use_vs1 && pe_req.op inside {VCOMPRESS};
+
+          // REPURPOSE FROM "VD" TO "VS2"
           operand_request_i[MaskB] = '{
             id      : pe_req.id,
             vs      : pe_req.vd,

@@ -42,9 +42,9 @@ module operand_queues_stage import ara_pkg::*; import rvv_pkg::*; import cf_math
     input  logic                                     addrgen_operand_ready_i,
     input  logic                                     sldu_operand_ready_i,
     // Mask unit
-    output elen_t              [1:0]                 mask_operand_o,
-    output logic               [1:0]                 mask_operand_valid_o,
-    input  logic               [1:0]                 mask_operand_ready_i
+    output elen_t              [2:0]                 mask_operand_o,
+    output logic               [2:0]                 mask_operand_valid_o,
+    input  logic               [2:0]                 mask_operand_ready_i
   );
 
   ///////////
@@ -232,6 +232,26 @@ module operand_queues_stage import ara_pkg::*; import rvv_pkg::*; import cf_math
   /////////////////
   //  Mask Unit  //
   /////////////////
+
+  operand_queue #(
+    .CmdBufDepth   ( MaskuInsnQueueDepth ),
+    .DataBufDepth  (                   1 ),
+    .NrLanes       (             NrLanes )
+  ) i_operand_queue_mask_a (
+    .clk_i                    (                            clk_i ),
+    .rst_ni                   (                           rst_ni ),
+    .lane_id_i                (                        lane_id_i ),
+    .operand_queue_cmd_i      (       operand_queue_cmd_i[MaskA] ),
+    .operand_queue_cmd_valid_i( operand_queue_cmd_valid_i[MaskA] ),
+    .operand_i                (                 operand_i[MaskA] ),
+    .operand_valid_i          (           operand_valid_i[MaskA] ),
+    .operand_issued_i         (          operand_issued_i[MaskA] ),
+    .operand_queue_ready_o    (     operand_queue_ready_o[MaskA] ),
+    .operand_o                (                mask_operand_o[2] ),
+    .operand_target_fu_o      (                     /* Unused */ ),
+    .operand_valid_o          (          mask_operand_valid_o[2] ),
+    .operand_ready_i          (          mask_operand_ready_i[2] )
+  );
 
   operand_queue #(
     .CmdBufDepth   (MaskuInsnQueueDepth),
