@@ -731,11 +731,11 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
             pe_req.vl) operand_request_i[MaskA].vl += 1;
           operand_request_push[MaskA] = pe_req.use_vs1 && pe_req.op inside {VCOMPRESS};
 
-          // REPURPOSE FROM "VD" TO "VS2"
+          // Request for vs2 operand (going to mask unit)
           operand_request_i[MaskB] = '{
             id      : pe_req.id,
             vs      : pe_req.vd,
-            eew     : pe_req.eew_vd_op,
+            eew     : pe_req.eew_vs2,
             scale_vl: pe_req.scale_vl,
             vtype   : pe_req.vtype,
             // Since this request goes outside of the lane, we might need to request an
@@ -747,7 +747,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
           };
           if (((pe_req.vl / NrLanes / ELEN) * NrLanes * ELEN) !=
             pe_req.vl) operand_request_i[MaskB].vl += 1;
-          operand_request_push[MaskB] = pe_req.use_vd_op;
+          operand_request_push[MaskB] = pe_req.use_vs2  && pe_req.op inside {VCOMPRESS};
 
           operand_request_i[MaskM] = '{
             id     : pe_req.id,
