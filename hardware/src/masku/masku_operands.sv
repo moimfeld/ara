@@ -28,9 +28,10 @@ module masku_operands import ara_pkg::*; import rvv_pkg::*; #(
     input  elen_t [NrLanes-1:0][NrMaskFUnits+3-1:0] masku_operands_i,
 
     // Operands prepared for masku execution
-    output elen_t [     NrLanes-1:0] masku_operand_a_o,      // ALU/FPU result (shuffled, uncompressed)
-    output elen_t [     NrLanes-1:0] masku_operand_b_o,      // Previous value of the destination vector register
-    output elen_t [     NrLanes-1:0] masku_operand_m_o,      // Mask
+    output elen_t [     NrLanes-1:0] masku_operand_alu_o,    // ALU/FPU result (shuffled, uncompressed)
+    output elen_t [     NrLanes-1:0] masku_operand_vs1_o,    // vs1 (shuffled)
+    output elen_t [     NrLanes-1:0] masku_operand_vs2_o,    // vs2 (shuffled)
+    output elen_t [     NrLanes-1:0] masku_operand_m_o,      // Mask (shuffled)
     output logic  [NrLanes*ELEN-1:0] bit_enable_mask_o,      // Bit mask for mask unit instructions (shuffled like mask register)
     output logic  [NrLanes*ELEN-1:0] shuffled_vl_bit_mask_o, // vl mask for mask unit instructions (first vl bits are 1, others 0)  (shuffled like mask register)
     output logic  [NrLanes*ELEN-1:0] alu_result_compressed_o // ALU/FPU results (shuffled, in mask format)
@@ -50,9 +51,10 @@ module masku_operands import ara_pkg::*; import rvv_pkg::*; #(
 
   // Extract operands from input (input comes in shuffled form from the lanes)
   for (genvar lane = 0; lane < NrLanes; lane++) begin
-    assign masku_operand_a_o[lane] = masku_operands_i[lane][3 + masku_fu_i];
-    assign masku_operand_b_o[lane] = masku_operands_i[lane][1];
-    assign masku_operand_m_o[lane] = masku_operands_i[lane][0];
+    assign masku_operand_m_o[lane]   = masku_operands_i[lane][0];
+    assign masku_operand_vs1_o[lane] = masku_operands_i[lane][1];
+    assign masku_operand_vs2_o[lane] = masku_operands_i[lane][2];
+    assign masku_operand_alu_o[lane] = masku_operands_i[lane][3 + masku_fu_i];
   end
 
   // ------------------------------------------------

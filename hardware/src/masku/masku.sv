@@ -118,8 +118,9 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
     // Operands coming from lanes
     .masku_operands_i        (       masku_operand_i ),
     // Operands prepared for mask unit execution
-    .masku_operand_a_o       (       masku_operand_a ),
-    .masku_operand_b_o       (       masku_operand_b ),
+    .masku_operand_alu_o     (       masku_operand_a ),
+    .masku_operand_vs1_o     (          /*not used*/ ),
+    .masku_operand_vs2_o     (       masku_operand_b ),
     .masku_operand_m_o       (       masku_operand_m ),
     .bit_enable_mask_o       (       bit_enable_mask ),
     .shuffled_vl_bit_mask_o  (    bit_enable_shuffle ),

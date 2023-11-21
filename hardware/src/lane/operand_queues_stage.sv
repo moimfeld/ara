@@ -247,34 +247,34 @@ module operand_queues_stage import ara_pkg::*; import rvv_pkg::*; import cf_math
     .operand_valid_i          (           operand_valid_i[MaskA] ),
     .operand_issued_i         (          operand_issued_i[MaskA] ),
     .operand_queue_ready_o    (     operand_queue_ready_o[MaskA] ),
+    .operand_o                (                mask_operand_o[1] ),
+    .operand_target_fu_o      (                     /* Unused */ ),
+    .operand_valid_o          (          mask_operand_valid_o[1] ),
+    .operand_ready_i          (          mask_operand_ready_i[1] )
+  );
+
+  operand_queue #(
+    .CmdBufDepth   ( MaskuInsnQueueDepth ),
+    .DataBufDepth  (                   1 ),
+    .FPUSupport    (          FPUSupport ),
+    .SupportIntExt2(                1'b1 ),
+    .SupportIntExt4(                1'b1 ),
+    .SupportIntExt8(                1'b1 ),
+    .NrLanes       (             NrLanes )
+  ) i_operand_queue_mask_b (
+    .clk_i                    (                            clk_i ),
+    .rst_ni                   (                           rst_ni ),
+    .lane_id_i                (                        lane_id_i ),
+    .operand_queue_cmd_i      (       operand_queue_cmd_i[MaskB] ),
+    .operand_queue_cmd_valid_i( operand_queue_cmd_valid_i[MaskB] ),
+    .operand_i                (                 operand_i[MaskB] ),
+    .operand_valid_i          (           operand_valid_i[MaskB] ),
+    .operand_issued_i         (          operand_issued_i[MaskB] ),
+    .operand_queue_ready_o    (     operand_queue_ready_o[MaskB] ),
     .operand_o                (                mask_operand_o[2] ),
     .operand_target_fu_o      (                     /* Unused */ ),
     .operand_valid_o          (          mask_operand_valid_o[2] ),
     .operand_ready_i          (          mask_operand_ready_i[2] )
-  );
-
-  operand_queue #(
-    .CmdBufDepth   (MaskuInsnQueueDepth),
-    .DataBufDepth  (1                  ),
-    .FPUSupport    (FPUSupport         ),
-    .SupportIntExt2(1'b1               ),
-    .SupportIntExt4(1'b1               ),
-    .SupportIntExt8(1'b1               ),
-    .NrLanes    (NrLanes   )
-  ) i_operand_queue_mask_b (
-    .clk_i                    (clk_i                           ),
-    .rst_ni                   (rst_ni                          ),
-    .lane_id_i                (lane_id_i                       ),
-    .operand_queue_cmd_i      (operand_queue_cmd_i[MaskB]      ),
-    .operand_queue_cmd_valid_i(operand_queue_cmd_valid_i[MaskB]),
-    .operand_i                (operand_i[MaskB]                ),
-    .operand_valid_i          (operand_valid_i[MaskB]          ),
-    .operand_issued_i         (operand_issued_i[MaskB]         ),
-    .operand_queue_ready_o    (operand_queue_ready_o[MaskB]    ),
-    .operand_o                (mask_operand_o[1]               ),
-    .operand_target_fu_o      (/* Unused */                    ),
-    .operand_valid_o          (mask_operand_valid_o[1]         ),
-    .operand_ready_i          (mask_operand_ready_i[1]         )
   );
 
   operand_queue #(
