@@ -1254,7 +1254,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                   6'b010111: begin
                     ara_req_d.op = ara_pkg::VCOMPRESS;
                     // Encoding corresponding to unmasked operations are reserved
-                    if (insn.varith_type.vm) illegal_insn = 1'b1;
+                    if (!insn.varith_type.vm) illegal_insn = 1'b1;
                   end
                   6'b011000: begin
                     ara_req_d.op        = ara_pkg::VMANDNOT;

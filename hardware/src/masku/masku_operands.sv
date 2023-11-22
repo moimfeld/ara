@@ -81,7 +81,7 @@ module masku_operands import ara_pkg::*; import rvv_pkg::*; #(
         automatic int dest_bit_seq  = (b >> vinsn_issue_i.vtype.vsew) + vrf_pnt_i;
         automatic int dest_byte_seq = dest_bit_seq / ELEN_BYTES;
         automatic int dest_byte     = shuffle_index(dest_byte_seq, NrLanes, vinsn_issue_i.vtype.vsew);
-        alu_result_compressed_o[ELEN_BYTES * dest_byte + dest_bit_seq[idx_width(ELEN_BYTES)-1:0]] = masku_operand_a_o[src_byte_lane][8 * src_byte_offset];
+        alu_result_compressed_o[ELEN_BYTES * dest_byte + dest_bit_seq[idx_width(ELEN_BYTES)-1:0]] = masku_operand_alu_o[src_byte_lane][8 * src_byte_offset];
       end
     end
   end
