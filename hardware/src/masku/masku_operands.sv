@@ -28,13 +28,16 @@ module masku_operands import ara_pkg::*; import rvv_pkg::*; #(
     input  elen_t [NrLanes-1:0][NrMaskFUnits+3-1:0] masku_operands_i,
 
     // Operands prepared for masku execution
-    output elen_t [     NrLanes-1:0] masku_operand_alu_o,    // ALU/FPU result (shuffled, uncompressed)
-    output elen_t [     NrLanes-1:0] masku_operand_vs1_o,    // vs1 (shuffled)
-    output elen_t [     NrLanes-1:0] masku_operand_vs2_o,    // vs2 (shuffled)
-    output elen_t [     NrLanes-1:0] masku_operand_m_o,      // Mask (shuffled)
-    output logic  [NrLanes*ELEN-1:0] bit_enable_mask_o,      // Bit mask for mask unit instructions (shuffled like mask register)
-    output logic  [NrLanes*ELEN-1:0] shuffled_vl_bit_mask_o, // vl mask for mask unit instructions (first vl bits are 1, others 0)  (shuffled like mask register)
-    output logic  [NrLanes*ELEN-1:0] alu_result_compressed_o // ALU/FPU results (shuffled, in mask format)
+    output elen_t [     NrLanes-1:0] masku_operand_alu_o,     // ALU/FPU result (shuffled, uncompressed)
+    output logic  [NrLanes*ELEN-1:0] masku_operand_alu_seq_o, // ALU/FPU result (deshuffled, uncompressed)
+    output elen_t [     NrLanes-1:0] masku_operand_vs1_o,     // vs1 (shuffled)
+    output logic  [NrLanes*ELEN-1:0] masku_operand_vs1_seq_o, // vs1 (deshuffled)
+    output elen_t [     NrLanes-1:0] masku_operand_vs2_o,     // vs2 (shuffled)
+    output logic  [NrLanes*ELEN-1:0] masku_operand_vs2_seq_o, // vs2 (deshuffled)
+    output elen_t [     NrLanes-1:0] masku_operand_m_o,       // Mask (shuffled)
+    output logic  [NrLanes*ELEN-1:0] bit_enable_mask_o,       // Bit mask for mask unit instructions (shuffled like mask register)
+    output logic  [NrLanes*ELEN-1:0] shuffled_vl_bit_mask_o,  // vl mask for mask unit instructions (first vl bits are 1, others 0)  (shuffled like mask register)
+    output logic  [NrLanes*ELEN-1:0] alu_result_compressed_o  // ALU/FPU results compressed (from sew to 1-bit) (shuffled, in mask format)
   );
 
   // Imports
@@ -49,12 +52,26 @@ module masku_operands import ara_pkg::*; import rvv_pkg::*; #(
   logic [DATAPATH_WIDTH-1:0] shuffled_vl_bit_mask;   // this bit enable signal is only dependent on vl
   vew_e                      bit_enable_shuffle_eew;
 
-  // Extract operands from input (input comes in shuffled form from the lanes)
+  // Extract operands from input (input comes in "shuffled form" from the lanes)
   for (genvar lane = 0; lane < NrLanes; lane++) begin
     assign masku_operand_m_o[lane]   = masku_operands_i[lane][0];
     assign masku_operand_vs1_o[lane] = masku_operands_i[lane][1];
     assign masku_operand_vs2_o[lane] = masku_operands_i[lane][2];
     assign masku_operand_alu_o[lane] = masku_operands_i[lane][3 + masku_fu_i];
+  end
+
+  // ---------------------
+  // Deshuffle vs1 and vs2
+  // ---------------------
+  always_comb begin
+      for (int b = 0; b < (NrLanes * ELEN_BYTES); b++) begin
+        automatic int deshuffle_idx = deshuffle_index(b, NrLanes, vinsn_issue_i.vtype.vsew);
+        automatic int lane_idx    = b / ELEN_BYTES; // rounded down to nearest integer
+        automatic int lane_offset = b % ELEN_BYTES;
+        masku_operand_alu_seq_o[8*deshuffle_idx +: 8] = masku_operand_vs1_o[lane_idx][8*lane_offset +: 8];
+        masku_operand_vs1_seq_o[8*deshuffle_idx +: 8] = masku_operand_vs1_o[lane_idx][8*lane_offset +: 8];
+        masku_operand_vs2_seq_o[8*deshuffle_idx +: 8] = masku_operand_vs2_o[lane_idx][8*lane_offset +: 8];
+      end
   end
 
   // ------------------------------------------------
