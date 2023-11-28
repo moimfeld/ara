@@ -548,7 +548,7 @@ module operand_requester import ara_pkg::*; import rvv_pkg::*; #(
     logic payload_lp_req;
     logic payload_lp_gnt;
     rr_arb_tree #(
-      .NumIn(int'(SlideAddrGenA)- int'(MaskB) + 1 + int'(VFU_LoadUnit) - int'(VFU_SlideUnit) + 1),
+      .NumIn(int'(SlideAddrGenA)- int'(MaskA) + 1 + int'(VFU_LoadUnit) - int'(VFU_SlideUnit) + 1),
       .DataWidth($bits(payload_t)                                                               ),
       .AxiVldRdy(1'b0                                                                           )
     ) i_lp_vrf_arbiter (
@@ -556,11 +556,11 @@ module operand_requester import ara_pkg::*; import rvv_pkg::*; #(
       .rst_ni (rst_ni),
       .flush_i(1'b0  ),
       .rr_i   ('0    ),
-      .data_i ({operand_payload[SlideAddrGenA:MaskB],
+      .data_i ({operand_payload[SlideAddrGenA:MaskA],
           operand_payload[NrOperandQueues + VFU_LoadUnit:NrOperandQueues + VFU_SlideUnit]} ),
-      .req_i ({operand_req[bank][SlideAddrGenA:MaskB],
+      .req_i ({operand_req[bank][SlideAddrGenA:MaskA],
           operand_req[bank][NrOperandQueues + VFU_LoadUnit:NrOperandQueues + VFU_SlideUnit]}),
-      .gnt_o ({operand_gnt[bank][SlideAddrGenA:MaskB],
+      .gnt_o ({operand_gnt[bank][SlideAddrGenA:MaskA],
           operand_gnt[bank][NrOperandQueues + VFU_LoadUnit:NrOperandQueues + VFU_SlideUnit]}),
       .data_o (payload_lp    ),
       .idx_o  (/* Unused */  ),
