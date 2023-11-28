@@ -123,7 +123,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
   logic  [NrLanes*ELEN-1:0] bit_enable_shuffle;
   logic  [NrLanes*ELEN-1:0] alu_result_compressed;
 
-  // Performs all shuffling and deshuffling of mask operands (including masks for mask instructions)
+  // Performs all shuffling and deshuffling of mask operands (including masks for mask instructions) - purely combinational module
   masku_operands #(
     .NrLanes ( NrLanes )
   ) i_masku_operands (
@@ -145,6 +145,42 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
     .shuffled_vl_bit_mask_o  (    bit_enable_shuffle ),
     .alu_result_compressed_o ( alu_result_compressed )
   );
+
+
+  // Local Parameter W_CPOP and W_VFIRST
+  //
+  // Description: Parameters W_CPOP and W_VFIRST enable time multiplexing of vcpop.m and vfirst.m instruction.
+  //
+  // Legal range W_CPOP:   {64, 128, ... , DataWidth*NrLanes} // DataWidth = 64
+  // Legal range W_VFIRST: {64, 128, ... , DataWidth*NrLanes} // DataWidth = 64
+  //
+  // Execution time example for vcpop.m (similar for vfirst.m):
+  // W_CPOP = 64; VLEN = 1024; vl = 1024
+  // t_vcpop.m = VLEN/W_CPOP = 8 [Cycles]
+  localparam int W_CPOP   = 64;
+  localparam int W_VFIRST = 64;
+  // derived parameters
+  localparam int MAX_W_CPOP_VFIRST = (W_CPOP > W_VFIRST) ? W_CPOP : W_VFIRST;
+  localparam int N_SLICES_CPOP   = NrLanes * DataWidth / W_CPOP;
+  localparam int N_SLICES_VFIRST = NrLanes * DataWidth / W_VFIRST;
+  // Check if parameters are within range
+  if (((W_CPOP & (W_CPOP - 1)) != 0) || (W_CPOP < 64)) begin
+    $fatal(1, "Parameter W_CPOP must be power of 2.");
+  end else if (((W_VFIRST & (W_VFIRST - 1)) != 0) || (W_VFIRST < 64)) begin
+    $fatal(1, "Parameter W_VFIRST must be power of 2.");
+  end
+
+  // VFIRST and VCPOP Signals
+  logic  [NrLanes*ELEN-1:0]              vcpop_operand;
+  logic  [$clog2(W_VFIRST):0]            popcount;
+  logic  [$clog2(VLEN):0]                popcount_d, popcount_q;
+  logic  [$clog2(W_VFIRST)-1:0]          vfirst_count;
+  logic  [$clog2(VLEN)-1:0]              vfirst_count_d, vfirst_count_q;
+  logic                                  vfirst_empty;
+  // counter to keep track of how many slices of the vcpop_operand have been processed
+  logic [$clog2(MAX_W_CPOP_VFIRST):0]   vcpop_slice_cnt_d, vcpop_slice_cnt_q;
+  logic [W_CPOP-1:0]                    vcpop_slice;
+  logic [W_VFIRST-1:0]                  vfirst_slice;
 
 
   ////////////////////////////////
@@ -345,43 +381,8 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
   //  Mask ALU  //
   ////////////////
 
-  // Local Parameter W_CPOP and W_VFIRST
-  //
-  // Description: Parameters W_CPOP and W_VFIRST enable time multiplexing of vcpop.m and vfirst.m instruction.
-  //
-  // Legal range W_CPOP:   {64, 128, ... , DataWidth*NrLanes} // DataWidth = 64
-  // Legal range W_VFIRST: {64, 128, ... , DataWidth*NrLanes} // DataWidth = 64
-  //
-  // Execution time example for vcpop.m (similar for vfirst.m):
-  // W_CPOP = 64; VLEN = 1024; vl = 1024
-  // t_vcpop.m = VLEN/W_CPOP = 8 [Cycles]
-  localparam int W_CPOP   = 64;
-  localparam int W_VFIRST = 64;
-  // derived parameters
-  localparam int MAX_W_CPOP_VFIRST = (W_CPOP > W_VFIRST) ? W_CPOP : W_VFIRST;
-  localparam int N_SLICES_CPOP   = NrLanes * DataWidth / W_CPOP;
-  localparam int N_SLICES_VFIRST = NrLanes * DataWidth / W_VFIRST;
-  // Check if parameters are within range
-  if (((W_CPOP & (W_CPOP - 1)) != 0) || (W_CPOP < 64)) begin
-    $fatal(1, "Parameter W_CPOP must be power of 2.");
-  end else if (((W_VFIRST & (W_VFIRST - 1)) != 0) || (W_VFIRST < 64)) begin
-    $fatal(1, "Parameter W_VFIRST must be power of 2.");
-  end
-
   elen_t [NrLanes-1:0]                   alu_result;
   logic  [NrLanes*ELEN-1:0]              mask;
-  logic  [NrLanes*ELEN-1:0]              vcpop_operand;
-  logic  [$clog2(W_VFIRST):0]            popcount;
-  logic  [$clog2(VLEN):0]                popcount_d, popcount_q;
-  logic  [$clog2(W_VFIRST)-1:0]          vfirst_count;
-  logic  [$clog2(VLEN)-1:0]              vfirst_count_d, vfirst_count_q;
-  logic                                  vfirst_empty;
-
-
-  // counter to keep track of how many slices of the vcpop_operand have been processed
-  logic [$clog2(MAX_W_CPOP_VFIRST):0] vcpop_slice_cnt_d, vcpop_slice_cnt_q;
-  logic [W_CPOP-1:0]                  vcpop_slice;
-  logic [W_VFIRST-1:0]                vfirst_slice;
 
   // keep track if first 1 mask element was found
   logic vfirst_found;
