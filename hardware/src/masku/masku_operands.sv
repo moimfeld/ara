@@ -96,26 +96,26 @@ module masku_operands import ara_pkg::*; import rvv_pkg::*; #(
 
     for (int unsigned b = 0; b < NrLanes * ELEN_BYTES; b++) begin
       // local helper signals
-      logic [idx_width(DATAPATH_WIDTH)-1:0] src_operand_byte_shuffle_index;
-      logic [idx_width(DATAPATH_WIDTH)-1:0] mask_operand_byte_shuffle_index;
-      logic [       idx_width(NrLanes)-1:0] mask_operand_byte_shuffle_lane_index;
+      logic [idx_width(DATAPATH_WIDTH)-1:0] src_operand_byte_shuffle_idx;
+      logic [idx_width(DATAPATH_WIDTH)-1:0] mask_operand_byte_shuffle_idx;
+      logic [       idx_width(NrLanes)-1:0] mask_operand_byte_shuffle_lane_idx;
       logic [    idx_width(ELEN_BYTES)-1:0] mask_operand_byte_shuffle_lane_offset;
 
       // get shuffle idices
       // Note: two types of shuffle indices are needed because the source operand and the
       //       mask register might not have the same effective element width (eew)
-      src_operand_byte_shuffle_index        = shuffle_index(b, NrLanes, bit_enable_shuffle_eew);
-      mask_operand_byte_shuffle_index       = shuffle_index(b, NrLanes, vinsn_issue_i.eew_vmask);
-      mask_operand_byte_shuffle_lane_index  = mask_operand_byte_shuffle_index[idx_width(ELEN_BYTES) +: idx_width(NrLanes)];
-      mask_operand_byte_shuffle_lane_offset = mask_operand_byte_shuffle_index[idx_width(ELEN_BYTES)-1:0];
+      src_operand_byte_shuffle_idx          = shuffle_index(b, NrLanes, bit_enable_shuffle_eew);
+      mask_operand_byte_shuffle_idx         = shuffle_index(b, NrLanes, vinsn_issue_i.eew_vmask);
+      mask_operand_byte_shuffle_lane_idx    = mask_operand_byte_shuffle_idx[idx_width(ELEN_BYTES) +: idx_width(NrLanes)];
+      mask_operand_byte_shuffle_lane_offset = mask_operand_byte_shuffle_idx[idx_width(ELEN_BYTES)-1:0];
 
       // shuffle bit enable
-      shuffled_vl_bit_mask[8*src_operand_byte_shuffle_index +: 8] = deshuffled_vl_bit_mask[8*b +: 8];
+      shuffled_vl_bit_mask[8*src_operand_byte_shuffle_idx +: 8] = deshuffled_vl_bit_mask[8*b +: 8];
 
       // Generate bit-level mask
-      bit_enable_mask_o[8*src_operand_byte_shuffle_index +: 8] = shuffled_vl_bit_mask[8*src_operand_byte_shuffle_index +: 8];
+      bit_enable_mask_o[8*src_operand_byte_shuffle_idx +: 8] = shuffled_vl_bit_mask[8*src_operand_byte_shuffle_idx +: 8];
       if (!vinsn_issue_i.vm) begin
-        bit_enable_mask_o[8*src_operand_byte_shuffle_index +: 8] &= masku_operand_m_o[mask_operand_byte_shuffle_lane_index][8*mask_operand_byte_shuffle_lane_offset +: 8];
+        bit_enable_mask_o[8*src_operand_byte_shuffle_idx +: 8] &= masku_operand_m_o[mask_operand_byte_shuffle_lane_idx][8*mask_operand_byte_shuffle_lane_offset +: 8];
       end
     end
   end
