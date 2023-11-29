@@ -721,15 +721,16 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
             eew     : pe_req.eew_vs1,
             scale_vl: pe_req.scale_vl,
             vtype   : pe_req.vtype,
-            // Since this request goes outside of the lane, we might need to request an
-            // extra operand regardless of whether it is valid in this lane or not.
-            vl      : (pe_req.vl / NrLanes / ELEN) << (int'(EW64) - int'(pe_req.vtype.vsew)),
             vstart  : vfu_operation_d.vstart,
             hazard  : pe_req.hazard_vs1 | pe_req.hazard_vd,
             default : '0
           };
-          if (((pe_req.vl / NrLanes / ELEN) * NrLanes * ELEN) !=
-            pe_req.vl) operand_request_i[MaskA].vl += 1;
+          // Request equal amount of vector elements per lane!
+          // This is important because mask unit expects all lanes to send elements.
+          operand_request_i[MaskA].vl = pe_req.vl / NrLanes;
+          if ((pe_req.vl % NrLanes) != 0) begin
+            operand_request_i[MaskA].vl += 1'b1;
+          end
           operand_request_push[MaskA] = pe_req.use_vs1 && pe_req.op inside {VCOMPRESS};
 
           // Request for vs2 operand (going to mask unit)
@@ -739,15 +740,16 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
             eew     : pe_req.eew_vs2,
             scale_vl: pe_req.scale_vl,
             vtype   : pe_req.vtype,
-            // Since this request goes outside of the lane, we might need to request an
-            // extra operand regardless of whether it is valid in this lane or not.
-            vl      : (pe_req.vl / NrLanes / ELEN) << (int'(EW64) - int'(pe_req.vtype.vsew)),
             vstart  : vfu_operation_d.vstart,
             hazard  : pe_req.hazard_vs2,
             default : '0
           };
-          if (((pe_req.vl / NrLanes / ELEN) * NrLanes * ELEN) !=
-            pe_req.vl) operand_request_i[MaskB].vl += 1;
+          // Request equal amount of vector elements per lane!
+          // This is important because mask unit expects all lanes to send elements.
+          operand_request_i[MaskB].vl = pe_req.vl / NrLanes;
+          if ((pe_req.vl % NrLanes) != 0) begin
+            operand_request_i[MaskB].vl += 1'b1;
+          end
           operand_request_push[MaskB] = pe_req.use_vs2  && pe_req.op inside {VCOMPRESS};
 
           operand_request_i[MaskM] = '{
