@@ -614,7 +614,6 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
                   endcase
                   vcomp_vrgath_result_element_cnt_d += 1'b1; // Note: Assignment depends on previous iteration of the for-loop --> this loop generates long combinational paths (might be suboptimal for timing)
                   vcomp_vrgath_result_vec_elements  += 1'b1; // update vcomp_vrgath_result_vec_elements
-                  $display("vcomp_vrgath_result_element_cnt_d = %0d at %0dps", vcomp_vrgath_result_element_cnt_d, $time);
                 end else begin
                   vcompress_stall_vs2_ready = 1'b1; // if there is another active element after the vcomp_vrgath_result_d is full, we must keep vs2 for another cycle, such that these active elements are not lost
                 end
@@ -984,7 +983,6 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
             if ((vinsn_issue.vl-issue_cnt_d)*4 >= vinsn_issue.vl)
               issue_cnt_d = '0;
           end else if (vinsn_issue.op inside {VCOMPRESS}) begin
-            $display("Wanting to set result_queue_valid_d at %0dps", $time);
             if (vcomp_vrgath_result_valid) begin
 
               result_queue_valid_d[result_queue_write_pnt_q] = {NrLanes{1'b1}};
