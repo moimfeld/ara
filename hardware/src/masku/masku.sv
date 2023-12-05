@@ -91,7 +91,6 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
   elen_t [NrLanes-1:0] masku_operand_vs2;
   logic  [NrLanes-1:0] masku_operand_vs2_valid_i;
   logic  [NrLanes-1:0] masku_operand_vs2_ready_o;
-  assign masku_operand_vs2_ready_o = '0; // tied to 0 for testing
 
   // vs2 (deshuffled)
   logic  [NrLanes*ELEN-1:0] masku_operand_vs2_seq;
@@ -103,21 +102,6 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
 
   // Insn-queue related signal
   pe_req_t vinsn_issue;
-
-  // Control flow for mask operands
-  for (genvar lane = 0; lane < NrLanes; lane++) begin: gen_unpack_masku_operands
-    assign masku_operand_a_valid_i[lane] = masku_operand_valid_i[lane][3 + masku_operand_fu];
-    for (genvar operand_fu = 0; operand_fu < NrMaskFUnits; operand_fu++) begin: gen_masku_operand_ready
-      assign masku_operand_ready_o[lane][3 + operand_fu] = (masku_fu_e'(operand_fu) == masku_operand_fu) && masku_operand_a_ready_o[lane];
-    end: gen_masku_operand_ready
-
-    assign masku_operand_ready_o[lane][2] = masku_operand_vs2_ready_o[lane];
-    assign masku_operand_vs1_valid_i[lane]  = (vinsn_issue.op inside {[VMSBF:VID]}) ? '1 : masku_operand_valid_i[lane][1];
-    assign masku_operand_ready_o[lane][1] = masku_operand_vs1_ready_o[lane];
-
-    assign masku_operand_m_valid_i[lane]  = masku_operand_valid_i[lane][0];
-    assign masku_operand_ready_o[lane][0] = masku_operand_m_ready_o[lane];
-  end: gen_unpack_masku_operands
 
   logic  [NrLanes*ELEN-1:0] bit_enable_mask;
   logic  [NrLanes*ELEN-1:0] bit_enable_shuffle;
@@ -181,6 +165,37 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
   logic [$clog2(MAX_W_CPOP_VFIRST):0]   vcpop_slice_cnt_d, vcpop_slice_cnt_q;
   logic [W_CPOP-1:0]                    vcpop_slice;
   logic [W_VFIRST-1:0]                  vfirst_slice;
+
+
+  // VCOMPRESS and VRGATHER signals
+  logic [             NrLanes*ELEN-1:0] vcomp_vrgath_result_d, vcomp_vrgath_result_q, vcomp_vrgath_result_shuffled;
+  logic [idx_width(NrLanes*ELEN/8)-1:0] vcomp_vrgath_result_vec_elements; // counts number of elements in result vector
+  logic [  idx_width(NrLanes*ELEN/8):0] total_input_elements; // Helper control signal to clean code
+  logic [         idx_width(MAXVL)-1:0] vcomp_vrgath_result_element_cnt_d, vcomp_vrgath_result_element_cnt_q; // counts total number of result elements
+  logic [         idx_width(MAXVL)-1:0] vcomp_vrgath_processed_element_vs1_cnt_d, vcomp_vrgath_processed_element_vs1_cnt_q; // counts number of elements processed by vrgather instructions - unused by vcompress
+  logic [         idx_width(MAXVL)-1:0] vcomp_vrgath_processed_element_vs2_cnt_d, vcomp_vrgath_processed_element_vs2_cnt_q; // counts number of elements processed by vcompress/vrgather instructions
+  logic                                 vcomp_vrgath_result_valid; // result buffer can be written back to vreg
+  logic                                 vcompress_stall_vs2_ready; // stall fetching mechanism for vs2
+  logic                                 vcompress_finished; // vcompress or vrgather instruction finished
+
+  // Control flow for mask operands
+  for (genvar lane = 0; lane < NrLanes; lane++) begin: gen_unpack_masku_operands
+    // immediately acknowledge operands coming from functional units
+    assign masku_operand_a_valid_i[lane] = masku_operand_valid_i[lane][3 + masku_operand_fu];
+    for (genvar operand_fu = 0; operand_fu < NrMaskFUnits; operand_fu++) begin: gen_masku_operand_ready
+      assign masku_operand_ready_o[lane][3 + operand_fu] = (masku_fu_e'(operand_fu) == masku_operand_fu) && masku_operand_a_ready_o[lane];
+    end: gen_masku_operand_ready
+
+    // acknowledge vs2 if there is no stall.
+    assign masku_operand_vs2_valid_i[lane] = masku_operand_valid_i[lane][2];
+    assign masku_operand_ready_o[lane][2]  = masku_operand_vs2_ready_o[lane];
+
+    assign masku_operand_vs1_valid_i[lane] = (vinsn_issue.op inside {[VMSBF:VID]}) ? '1 : masku_operand_valid_i[lane][1];
+    assign masku_operand_ready_o[lane][1]  = masku_operand_vs1_ready_o[lane];
+
+    assign masku_operand_m_valid_i[lane]   = masku_operand_valid_i[lane][0];
+    assign masku_operand_ready_o[lane][0]  = masku_operand_m_ready_o[lane];
+  end: gen_unpack_masku_operands
 
 
   ////////////////////////////////
@@ -419,6 +434,17 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
     alu_operand_b_seq_m = '0;
     mask                = '0;
     vcpop_operand       = '0;
+    vcompress_finished                       = 1'b0;
+    total_input_elements                     = '0;
+    vcomp_vrgath_result_vec_elements         = '0;
+    vcomp_vrgath_result_element_cnt_d        = '0;
+    vcomp_vrgath_processed_element_vs1_cnt_d = '0;
+    vcomp_vrgath_processed_element_vs2_cnt_d = '0;
+    vcomp_vrgath_result_d                    = '0;
+    vcomp_vrgath_result_shuffled             = '0;
+    vcomp_vrgath_result_valid                = '0;
+    vcompress_stall_vs2_ready                = '0;
+    masku_operand_vs2_ready_o                = '0;
 
     if (vinsn_issue_valid) begin
 
@@ -549,6 +575,69 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
         [VCPOP:VFIRST] : begin
           vcpop_operand = (!vinsn_issue.vm) ? masku_operand_a & bit_enable_mask : masku_operand_a;
         end
+        // NOTE: Current VCOMPRESS implementation assumes that result queue is always ready to accept results! If result queue is not ready for the result,
+        //       this implementation will break
+        VCOMPRESS : begin
+          // Preserve vcompress state (because one result vector "slice" can take multiple cycles to compute)
+          vcomp_vrgath_result_element_cnt_d        = vcomp_vrgath_result_element_cnt_q;
+          vcomp_vrgath_processed_element_vs2_cnt_d = vcomp_vrgath_processed_element_vs2_cnt_q;
+          vcomp_vrgath_result_d                    = vcomp_vrgath_result_q;
+
+          // initialize control signals
+          vcomp_vrgath_result_valid = 1'b0;
+          vcompress_stall_vs2_ready = 1'b0;
+          masku_operand_vs2_ready_o = '0;
+          total_input_elements      = (NrLanes * ELEN) / (8 << vinsn_issue.vtype.vsew);
+
+          // Assign vcomp_vrgath_result_vec_elements (# valid result elements in result vector)
+          vcomp_vrgath_result_vec_elements = vcomp_vrgath_result_element_cnt_d % total_input_elements;
+
+          // After result writeback, reset vcomp_vrgath_result_d
+          if (vcomp_vrgath_result_vec_elements == '0) begin
+            vcomp_vrgath_result_d = '0;
+          end
+
+          // Only start/continue computing vcompress result if both operands are ready
+          if ((&masku_operand_vs1_valid_i) && (&masku_operand_vs2_valid_i)) begin
+            masku_operand_vs2_ready_o = '1; // by default, receive new operand (only if vcomp_vrgath_result_d runs full keep )
+            // Iterate over every element of the incoming vs2 vector section and copy active elements to destination vector
+            for (int i = 0; i < (NrLanes * ELEN) / (8 << vinsn_issue.vtype.vsew); i++) begin
+              if (masku_operand_vs1_seq[vcomp_vrgath_processed_element_vs2_cnt_d+i]) begin
+                // copy element from source vector to (compressed) destination vector (ONLY IF vcomp_vrgath_result_d IS NOT FULL)
+                if (!vcomp_vrgath_result_valid) begin
+                  unique case (vinsn_issue.vtype.vsew)
+                    EW8 : vcomp_vrgath_result_d[vcomp_vrgath_result_vec_elements* 8 +:  8] = masku_operand_vs2_seq[i* 8 +:  8];
+                    EW16: vcomp_vrgath_result_d[vcomp_vrgath_result_vec_elements*16 +: 16] = masku_operand_vs2_seq[i*16 +: 16];
+                    EW32: vcomp_vrgath_result_d[vcomp_vrgath_result_vec_elements*32 +: 32] = masku_operand_vs2_seq[i*32 +: 32];
+                    EW64: vcomp_vrgath_result_d[vcomp_vrgath_result_vec_elements*64 +: 64] = masku_operand_vs2_seq[i*64 +: 64];
+                    default: ; // Not sure what should be the default
+                  endcase
+                  vcomp_vrgath_result_element_cnt_d += 1'b1; // Note: Assignment depends on previous iteration of the for-loop --> this loop generates long combinational paths (might be suboptimal for timing)
+                  vcomp_vrgath_result_vec_elements  += 1'b1; // update vcomp_vrgath_result_vec_elements
+                  $display("vcomp_vrgath_result_element_cnt_d = %0d at %0dps", vcomp_vrgath_result_element_cnt_d, $time);
+                end else begin
+                  vcompress_stall_vs2_ready = 1'b1; // if there is another active element after the vcomp_vrgath_result_d is full, we must keep vs2 for another cycle, such that these active elements are not lost
+                end
+
+                // Check if vcomp_vrgath_result_d is full --> if full, result should be written back to registerfile
+                vcomp_vrgath_result_valid = vcomp_vrgath_result_vec_elements == total_input_elements;
+              end
+            end
+            // MOIMFELD: This line can possibly still create issues, because it gets incremented even if not all elements have been processed
+            vcomp_vrgath_processed_element_vs2_cnt_d += total_input_elements;
+
+            // Update control signals
+            if (vcompress_stall_vs2_ready) begin
+              masku_operand_vs2_ready_o = '0; // do not request new operand if old operand was not fully processed
+            end
+            // MOIMFELD: TODO add line of code that fetches new vs1 operand (if all mask elments have been seen (i.e. use condition where #elements % NrLanes*ELEN ==0))
+
+            // Check if vcompressed instrcution is finished
+            if (vcomp_vrgath_processed_element_vs2_cnt_d >= vinsn_issue.vl) begin
+              vcompress_finished = 1'b1;
+            end
+          end
+        end
         default: begin
           alu_result    = '0;
           alu_result_vm = '0;
@@ -560,6 +649,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
     for (int b = 0; b < (NrLanes*StrbWidth); b++) begin
       automatic int shuffle_byte             = shuffle_index(b, NrLanes, vinsn_issue.vtype.vsew);
       alu_result_vm_seq[8*shuffle_byte +: 8] = alu_result_vm_m[8*b +: 8];
+      vcomp_vrgath_result_shuffled[8*shuffle_byte +: 8] = vcomp_vrgath_result_d[8*b +: 8];
     end
 
     // alu_result propagation mux
@@ -589,6 +679,9 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
   logic [NrLanes-1:0] fake_a_valid;
   logic last_incoming_a;
   logic unbalanced_a;
+
+  // Control signals for better code-readability (this signals goes high if a result is valid and can be pushed to the result_queue)
+  logic vreg_wb_valid;
 
   // Information about which is the target FU of the request
   assign masku_operand_fu = (vinsn_issue.op inside {[VMFEQ:VMFGE]}) ? MaskFUMFpu : MaskFUAlu;
@@ -789,44 +882,63 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
     //  Write results to the lanes  //
     //////////////////////////////////
 
+
+    // By default, no writeback to the vector register
+    // vreg_wb_valid = vinsn_issue_valid && !vd_scalar(vinsn_issue.op) && ;
+
+    // MOIMFELD: Handling vcompress result writeback  -- TODO: CLEAN - lots of code repretition at the moment!!!!!
+
     // Is there an instruction ready to be issued?
     if (vinsn_issue_valid && !vd_scalar(vinsn_issue.op)) begin
       // This instruction executes on the Mask Unit
       if (vinsn_issue.vfu == VFU_MaskUnit) begin
         // Is there place in the result queue to write the results?
         // Did we receive the operands?
-        if (!result_queue_full && &(masku_operand_a_valid_i | fake_a_valid) &&
-            (!vinsn_issue.use_vd_op || &masku_operand_vs1_valid_i)) begin
-          // How many elements are we committing in total?
-          // Since we are committing bits instead of bytes, we carry out the following calculation
-          // with ceil(vl/8) instead.
-          automatic int element_cnt_all_lanes           = (ELENB * NrLanes) >> int'(vinsn_issue.vtype.vsew);
-          // How many elements are remaining to be committed? Carry out the calculation with
-          // ceil(issue_cnt/8).
-          automatic int remaining_element_cnt_all_lanes = (issue_cnt_q + 7) / 8;
-          remaining_element_cnt_all_lanes               = (remaining_element_cnt_all_lanes +
-            (1 << int'(vinsn_issue.vtype.vsew)) - 1) >> int'(vinsn_issue.vtype.vsew);
-          if (element_cnt_all_lanes > remaining_element_cnt_all_lanes)
-            element_cnt_all_lanes = remaining_element_cnt_all_lanes;
+        if (!result_queue_full && ((&(masku_operand_a_valid_i | fake_a_valid) &&
+            (!vinsn_issue.use_vd_op || &masku_operand_vs1_valid_i)) || vcomp_vrgath_result_valid)) begin
+          if (!(vinsn_issue.op inside {VCOMPRESS})) begin
+            // How many elements are we committing in total?
+            // Since we are committing bits instead of bytes, we carry out the following calculation
+            // with ceil(vl/8) instead.
+            automatic int element_cnt_all_lanes           = (ELENB * NrLanes) >> int'(vinsn_issue.vtype.vsew);
+            // How many elements are remaining to be committed? Carry out the calculation with
+            // ceil(issue_cnt/8).
+            automatic int remaining_element_cnt_all_lanes = (issue_cnt_q + 7) / 8;
+            remaining_element_cnt_all_lanes               = (remaining_element_cnt_all_lanes +
+              (1 << int'(vinsn_issue.vtype.vsew)) - 1) >> int'(vinsn_issue.vtype.vsew);
+            if (element_cnt_all_lanes > remaining_element_cnt_all_lanes)
+              element_cnt_all_lanes = remaining_element_cnt_all_lanes;
 
-          // Acknowledge the operands of this instruction.
-          // At this stage, acknowledge only the first operand, "a", coming from the ALU/VMFpu.
-          masku_operand_a_ready_o = masku_operand_a_valid_i;
+            // Acknowledge the operands of this instruction.
+            // At this stage, acknowledge only the first operand, "a", coming from the ALU/VMFpu.
+            masku_operand_a_ready_o = masku_operand_a_valid_i;
 
-          // Store the result in the operand queue
-          for (int unsigned lane = 0; lane < NrLanes; lane++) begin
-            // How many elements are we committing in this lane?
-            automatic int element_cnt = element_cnt_all_lanes / NrLanes;
-            if (lane < element_cnt_all_lanes[idx_width(NrLanes)-1:0])
-              element_cnt += 1;
+            // Store the result in the operand queue
+            for (int unsigned lane = 0; lane < NrLanes; lane++) begin
+              // How many elements are we committing in this lane?
+              automatic int element_cnt = element_cnt_all_lanes / NrLanes;
+              if (lane < element_cnt_all_lanes[idx_width(NrLanes)-1:0])
+                element_cnt += 1;
 
-            result_queue_d[result_queue_write_pnt_q][lane] = '{
-              wdata: result_queue_q[result_queue_write_pnt_q][lane].wdata | alu_result[lane],
-              be   : (vinsn_issue.op inside {[VMSBF:VID]}) ? '1 : be(element_cnt, vinsn_issue.vtype.vsew),
-              addr : (vinsn_issue.op inside {[VMSBF:VID]}) ? vaddr(vinsn_issue.vd, NrLanes) + ((vinsn_issue.vl - issue_cnt_q) >> (int'(EW64) - vinsn_issue.vtype.vsew)) : vaddr(vinsn_issue.vd, NrLanes) +
-                (((vinsn_issue.vl - issue_cnt_q) / NrLanes / DataWidth)),
-              id : vinsn_issue.id
-            };
+              result_queue_d[result_queue_write_pnt_q][lane] = '{
+                wdata: result_queue_q[result_queue_write_pnt_q][lane].wdata | alu_result[lane],
+                be   : (vinsn_issue.op inside {[VMSBF:VID]}) ? '1 : be(element_cnt, vinsn_issue.vtype.vsew),
+                addr : (vinsn_issue.op inside {[VMSBF:VID]}) ? vaddr(vinsn_issue.vd, NrLanes) + ((vinsn_issue.vl - issue_cnt_q) >> (int'(EW64) - vinsn_issue.vtype.vsew)) : vaddr(vinsn_issue.vd, NrLanes) +
+                  (((vinsn_issue.vl - issue_cnt_q) / NrLanes / DataWidth)),
+                id : vinsn_issue.id
+              };
+            end
+          end else begin
+            for (int unsigned lane = 0; lane < NrLanes; lane++) begin
+              automatic int element_cnt = vcomp_vrgath_result_vec_elements / NrLanes;
+              // MOIMFELD: TODO - take care of fringe elements if result vector is not full
+              result_queue_d[result_queue_write_pnt_q][lane] = '{
+                wdata: vcomp_vrgath_result_shuffled[ELEN * lane +: ELEN],
+                be   : be(element_cnt, vinsn_issue.vtype.vsew),
+                addr : vaddr(vinsn_issue.vd, NrLanes) + ((vcomp_vrgath_result_element_cnt_d - total_input_elements) >> (int'(EW64) - vinsn_issue.vtype.vsew)) / NrLanes, // MOIMFELD: TODO - CHECK IF IT IS WORKING FOR DIFFERENT SEW and add comment on how this is computed
+                id   : vinsn_issue.id
+              };
+            end
           end
 
           // Increment the VRF pointer
@@ -871,6 +983,18 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
             issue_cnt_d = issue_cnt_q - (1 << (int'(EW64) - vinsn_issue.vtype.vsew));
             if ((vinsn_issue.vl-issue_cnt_d)*4 >= vinsn_issue.vl)
               issue_cnt_d = '0;
+          end else if (vinsn_issue.op inside {VCOMPRESS}) begin
+            $display("Wanting to set result_queue_valid_d at %0dps", $time);
+            if (vcomp_vrgath_result_valid) begin
+
+              result_queue_valid_d[result_queue_write_pnt_q] = {NrLanes{1'b1}};
+              // Increment result queue pointers and counters
+              result_queue_cnt_d += 1;
+              if (result_queue_write_pnt_q == ResultQueueDepth-1)
+                result_queue_write_pnt_d = '0;
+              else
+                result_queue_write_pnt_d = result_queue_write_pnt_q + 1;
+            end
           end else begin
             result_queue_valid_d[result_queue_write_pnt_q] = {NrLanes{1'b1}};
 
@@ -1000,10 +1124,19 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
         result_queue_d[result_queue_read_pnt_q] = '0;
 
         // Decrement the counter of remaining vector elements waiting to be written
-        commit_cnt_d = commit_cnt_q - NrLanes * DataWidth;
-        if (commit_cnt_q < (NrLanes * DataWidth))
-          commit_cnt_d = '0;
+        if (!(vinsn_issue.op inside {VCOMPRESS})) begin
+          commit_cnt_d = commit_cnt_q - NrLanes * DataWidth;
+          if (commit_cnt_q < (NrLanes * DataWidth))
+            commit_cnt_d = '0;
+        end
       end
+    
+    // vcompress does not have a fixed number of results. Therefore, the commit counter
+    // cannot be reused as an indicator for when the instruciton is done. For this reason
+    // the signal 'vcompress_finished' is introduced.
+    if ((vinsn_issue.op inside {VCOMPRESS}) && vcompress_finished) begin
+      commit_cnt_d = '0;
+    end
 
     ///////////////////////////
     // Commit scalar results //
@@ -1108,6 +1241,9 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
       vcpop_slice_cnt_q  <= '0;
       popcount_q         <= '0;
       vfirst_count_q     <= '0;
+      vcomp_vrgath_result_element_cnt_q <= '0;
+      vcomp_vrgath_processed_element_vs2_cnt_q <= '0;
+      vcomp_vrgath_result_q <= '0;
     end else begin
       vinsn_running_q    <= vinsn_running_d;
       read_cnt_q         <= read_cnt_d;
@@ -1120,6 +1256,9 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
       vcpop_slice_cnt_q  <= vcpop_slice_cnt_d;
       popcount_q         <= popcount_d;
       vfirst_count_q     <= vfirst_count_d;
+      vcomp_vrgath_result_element_cnt_q    <= vcomp_vrgath_result_element_cnt_d;
+      vcomp_vrgath_processed_element_vs2_cnt_q <= vcomp_vrgath_processed_element_vs2_cnt_d;
+      vcomp_vrgath_result_q <= vcomp_vrgath_result_d;
     end
   end
 
