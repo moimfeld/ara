@@ -601,7 +601,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
           if ((&masku_operand_vs1_valid_i) && (&masku_operand_vs2_valid_i)) begin
             masku_operand_vs2_ready_o = '1; // by default, receive new operand (only if vcomp_vrgath_result_d runs full keep )
             // Iterate over every element of the incoming vs2 vector section and copy active elements to destination vector
-            for (int i = 0; i < (NrLanes * ELEN) / (8 << vinsn_issue.vtype.vsew); i++) begin
+            for (int i = 0; i < total_input_elements; i++) begin
               if (masku_operand_vs1_seq[vcomp_vrgath_processed_element_vs2_cnt_d+i]) begin
                 // copy element from source vector to (compressed) destination vector (ONLY IF vcomp_vrgath_result_d IS NOT FULL)
                 if (!vcomp_vrgath_result_valid) begin
