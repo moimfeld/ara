@@ -145,7 +145,7 @@ package ara_pkg;
     // Mask operations
     VMANDNOT, VMAND, VMOR, VMXOR, VMORNOT, VMNAND, VMNOR, VMXNOR,
     // Gather and compress
-    VCOMPRESS,
+    VCOMPRESS, VRGATHER,
     // Scalar moves from VRF
     VMVXS, VFMVFS,
     // Slide instructions
