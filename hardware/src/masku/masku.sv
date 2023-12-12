@@ -101,6 +101,9 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
   logic  [NrLanes-1:0] masku_operand_m_valid_i;
   logic  [NrLanes-1:0] masku_operand_m_ready_o;
 
+  // Mask deshuffled
+  logic  [NrLanes*ELEN-1:0] masku_operand_m_seq;
+
   // Insn-queue related signal
   pe_req_t vinsn_issue;
 
@@ -126,6 +129,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
     .masku_operand_vs2_o     (     masku_operand_vs2 ),
     .masku_operand_vs2_seq_o ( masku_operand_vs2_seq ),
     .masku_operand_m_o       (       masku_operand_m ),
+    .masku_operand_m_seq_o   (   masku_operand_m_seq ),
     .bit_enable_mask_o       (       bit_enable_mask ),
     .shuffled_vl_bit_mask_o  (    bit_enable_shuffle ),
     .alu_result_compressed_o ( alu_result_compressed )
@@ -178,7 +182,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
   logic                                 vcomp_vrgath_result_valid; // result buffer can be written back to vreg
   logic                                 vcompress_stall_vs2_ready; // stall fetching mechanism for vs2
   logic                                 vcompress_finished, vrgather_finished; // vcompress or vrgather instruction finished
-  logic [NrLanes-1:0][       ELENB-1:0] vrgath_be; // byte enable for vrgather
+  logic [            NrLanes*ELENB-1:0] vrgath_be; // byte enable for vrgather
   // logic [                             ] vrgath_result_onehot_valid_d, vrgath_result_onehot_valid_q; // signal tracks valid result elements in the result vector of vrgath
 
   // Control flow for mask operands
@@ -722,21 +726,25 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
             vcomp_vrgath_result_valid = vcomp_vrgath_processed_element_vs2_cnt_d >= vinsn_issue.vl;
 
             // If vrgather result is valid, do:
+            // - Compute byte enable signal (before updating vs1 pointer)
             // - Update processed elements of vs1 counter(vcomp_vrgath_processed_element_vs1_cnt_d)
             // - Acknowledge vs1 operand to receive next vs1 slice
             // - Reset processed elements of vs2 counter
             // - Ask for new operand (if instruction is not finished)
             if (vcomp_vrgath_result_valid) begin
+              // Compute byte enable signal
+              for (int b = 0; b < ELENB * NrLanes; b++) begin
+                automatic int mask_bit_idx = vcomp_vrgath_processed_element_vs1_cnt_d + (b >> vinsn_issue.vtype.vsew);
+                if (masku_operand_m_seq[mask_bit_idx] || vinsn_issue.vm) begin
+                  automatic int shuffle_byte = shuffle_index(b, NrLanes, vinsn_issue.vtype.vsew);
+                  vrgath_be[shuffle_byte] = 1'b1;
+                end
+              end
               vcomp_vrgath_processed_element_vs1_cnt_d += total_input_elements;
               vcomp_vrgath_result_element_cnt_d = vcomp_vrgath_processed_element_vs1_cnt_d; // vcomp_vrgath_result_element_cnt_d is needed for address computation during result writeback
               masku_operand_vs1_ready_o = '1;
               vcomp_vrgath_processed_element_vs2_cnt_d = '0;
-              masku_operand_req_o = '1; // MOIMFELD: TODO - This operand request should be guarded by the "finished" signal, because there should not be a new request if instruciton is finished
-              // MOIMFELD: TODO - Trigger "new vs2 pass here"
-              // MOIMFELD: TODO - byte enable signal should be computed here (i.e. vrgather masking) (for now we default to "write everything")
-              for (int unsigned lane = 0; lane < NrLanes; lane++) begin
-                vrgath_be = '1;
-              end
+              masku_operand_req_o = '1;
             end
 
             if (vcomp_vrgath_processed_element_vs1_cnt_d >= vinsn_issue.vl) begin
@@ -857,7 +865,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
     if (vinsn_issue_valid && !(vd_scalar(vinsn_issue.op))) begin
       // Is there place in the mask queue to write the mask operands?
       // Did we receive the mask bits on the MaskM channel?
-      if (!vinsn_issue.vm && !mask_queue_full && &masku_operand_m_valid_i) begin
+      if (!vinsn_issue.vm && !mask_queue_full && &masku_operand_m_valid_i && !(vinsn_issue.op inside {VRGATHER})) begin
         // Copy data from the mask operands into the mask queue
         for (int vrf_seq_byte = 0; vrf_seq_byte < NrLanes*StrbWidth; vrf_seq_byte++) begin
           // Map vrf_seq_byte to the corresponding byte in the VRF word.
@@ -1054,7 +1062,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
               // MOIMFELD: TODO - take care of fringe elements if result vector is not full --> do this in alu entry of VCOMPRESS and VRGATHER respectively and send signal to here that controls result writeback
               result_queue_d[result_queue_write_pnt_q][lane] = '{
                 wdata: vcomp_vrgath_result_shuffled[ELEN * lane +: ELEN],
-                be   : vinsn_issue.op inside {VCOMPRESS} ? be(element_cnt, vinsn_issue.vtype.vsew) : vrgath_be,
+                be   : vinsn_issue.op inside {VCOMPRESS} ? be(element_cnt, vinsn_issue.vtype.vsew) : vrgath_be[ELENB*lane +: 8],
                 addr : base_addr + addr_offset,
                 id   : vinsn_issue.id
               };

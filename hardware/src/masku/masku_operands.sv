@@ -35,6 +35,7 @@ module masku_operands import ara_pkg::*; import rvv_pkg::*; #(
     output elen_t [     NrLanes-1:0] masku_operand_vs2_o,     // vs2 (shuffled)
     output logic  [NrLanes*ELEN-1:0] masku_operand_vs2_seq_o, // vs2 (deshuffled)
     output elen_t [     NrLanes-1:0] masku_operand_m_o,       // Mask (shuffled)
+    output logic  [NrLanes*ELEN-1:0] masku_operand_m_seq_o,   // Mask (deshuffled)
     output logic  [NrLanes*ELEN-1:0] bit_enable_mask_o,       // Bit mask for mask unit instructions (shuffled like mask register)
     output logic  [NrLanes*ELEN-1:0] shuffled_vl_bit_mask_o,  // vl mask for mask unit instructions (first vl bits are 1, others 0)  (shuffled like mask register)
     output logic  [NrLanes*ELEN-1:0] alu_result_compressed_o  // ALU/FPU results compressed (from sew to 1-bit) (shuffled, in mask format)
@@ -65,12 +66,14 @@ module masku_operands import ara_pkg::*; import rvv_pkg::*; #(
   // ---------------------
   always_comb begin
       for (int b = 0; b < (NrLanes * ELEN_BYTES); b++) begin
-        automatic int deshuffle_idx = deshuffle_index(b, NrLanes, vinsn_issue_i.vtype.vsew);
+        automatic int deshuffle_idx   = deshuffle_index(b, NrLanes, vinsn_issue_i.vtype.vsew);
+        automatic int deshuffle_m_idx = deshuffle_index(b, NrLanes, vinsn_issue_i.eew_vmask);
         automatic int lane_idx    = b / ELEN_BYTES; // rounded down to nearest integer
         automatic int lane_offset = b % ELEN_BYTES;
         masku_operand_alu_seq_o[8*deshuffle_idx +: 8] = masku_operand_vs1_o[lane_idx][8*lane_offset +: 8];
         masku_operand_vs1_seq_o[8*deshuffle_idx +: 8] = masku_operand_vs1_o[lane_idx][8*lane_offset +: 8];
         masku_operand_vs2_seq_o[8*deshuffle_idx +: 8] = masku_operand_vs2_o[lane_idx][8*lane_offset +: 8];
+        masku_operand_m_seq_o[8*deshuffle_m_idx +: 8] = masku_operand_m_o[lane_idx][8*lane_offset +: 8];
       end
   end
 
