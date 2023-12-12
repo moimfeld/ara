@@ -82,6 +82,7 @@ module lane import ara_pkg::*; import rvv_pkg::*; #(
     output `STRUCT_VECT(elen_t, [NrMaskFUnits+3-1:0])      mask_operand_o, // NrMaskFUnits + 3 because the mask unit needs to access the results from functional units and vs1, vs2 and v0.m 
     output logic                [NrMaskFUnits+3-1:0]       mask_operand_valid_o,
     input  logic                [NrMaskFUnits+3-1:0]       mask_operand_ready_i,
+    input  logic                                           mask_operand_req_i,
     input  logic                                           masku_result_req_i,
     input  vid_t                                           masku_result_id_i,
     input  vaddr_t                                         masku_result_addr_i,
@@ -154,7 +155,9 @@ module lane import ara_pkg::*; import rvv_pkg::*; #(
     .alu_ready_i            (alu_ready            ),
     .alu_vinsn_done_i       (alu_vinsn_done       ),
     .mfpu_ready_i           (mfpu_ready           ),
-    .mfpu_vinsn_done_i      (mfpu_vinsn_done      )
+    .mfpu_vinsn_done_i      (mfpu_vinsn_done      ),
+    // Operand request from Mask Unit (for VRGATHER instruction)
+    .mask_operand_req_i     (mask_operand_req_i   )
   );
 
   /////////////////////////

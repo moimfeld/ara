@@ -33,7 +33,10 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
     input  logic                                          alu_ready_i,
     input  logic                 [NrVInsn-1:0]            alu_vinsn_done_i,
     input  logic                                          mfpu_ready_i,
-    input  logic                 [NrVInsn-1:0]            mfpu_vinsn_done_i
+    input  logic                 [NrVInsn-1:0]            mfpu_vinsn_done_i,
+    // Operand request from Mask Unit (for VRGATHER instruction)
+    input  logic                                          mask_operand_req_i
+
   );
 
   ////////////////////////////
@@ -119,6 +122,9 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
   operand_request_cmd_t [NrOperandQueues-1:0] operand_request_d;
   logic                 [NrOperandQueues-1:0] operand_request_valid_d;
 
+  // Cache for operand request for MaskB (vs2)
+  operand_request_cmd_t operand_request_maskb_d, operand_request_maskb_q;
+
   always_comb begin: p_operand_request
     for (int queue = 0; queue < NrOperandQueues; queue++) begin
       // Maintain state
@@ -195,6 +201,15 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
     // Make no requests to the lane's VFUs
     vfu_operation_d       = '0;
     vfu_operation_valid_d = 1'b0;
+
+    // Keep operand request for maskb cached
+    operand_request_maskb_d = operand_request_maskb_q;
+
+    // Issue operand request if mask unit asks for it
+    if (mask_operand_req_i) begin
+      operand_request_i[MaskB]    = operand_request_maskb_d;
+      operand_request_push[MaskB] =  1'b1;
+    end
 
     // If the operand requesters are busy, abort the request and wait for another cycle.
     if (pe_req_valid) begin
@@ -653,7 +668,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
             if ((operand_request_i[AluA].vl << (int'(EW64) - int'(pe_req.eew_vs1))) * NrLanes !=
                 pe_req.vl) operand_request_i[AluA].vl += 1;
           end
-          operand_request_push[AluA] = pe_req.use_vs1 && !(pe_req.op inside {[VMFEQ:VMFGE], VCOMPRESS});
+          operand_request_push[AluA] = pe_req.use_vs1 && !(pe_req.op inside {[VMFEQ:VMFGE], VCOMPRESS, VRGATHER});
 
           operand_request_i[AluB] = '{
             id      : pe_req.id,
@@ -680,7 +695,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
             if ((operand_request_i[AluB].vl << (int'(EW64) - int'(pe_req.eew_vs2))) * NrLanes !=
                 pe_req.vl) operand_request_i[AluB].vl += 1;
           end
-          operand_request_push[AluB] = pe_req.use_vs2 && !(pe_req.op inside {[VMFEQ:VMFGE], VCOMPRESS});
+          operand_request_push[AluB] = pe_req.use_vs2 && !(pe_req.op inside {[VMFEQ:VMFGE], VCOMPRESS, VRGATHER});
 
           operand_request_i[MulFPUA] = '{
             id      : pe_req.id,
@@ -696,7 +711,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
           // This is an operation that runs normally on the ALU, and then gets *condensed* and
           // reshuffled at the Mask Unit.
           operand_request_i[MulFPUA].vl = vfu_operation_d.vl;
-          operand_request_push[MulFPUA] = pe_req.use_vs1 && pe_req.op inside {[VMFEQ:VMFGE]} && !(pe_req.op inside {VCOMPRESS});
+          operand_request_push[MulFPUA] = pe_req.use_vs1 && pe_req.op inside {[VMFEQ:VMFGE]} && !(pe_req.op inside {VCOMPRESS, VRGATHER});
 
           operand_request_i[MulFPUB] = '{
             id      : pe_req.id,
@@ -711,7 +726,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
           // This is an operation that runs normally on the ALU, and then gets *condensed* and
           // reshuffled at the Mask Unit.
           operand_request_i[MulFPUB].vl = vfu_operation_d.vl;
-          operand_request_push[MulFPUB] = pe_req.use_vs2 && pe_req.op inside {[VMFEQ:VMFGE]} && !(pe_req.op inside {VCOMPRESS});
+          operand_request_push[MulFPUB] = pe_req.use_vs2 && pe_req.op inside {[VMFEQ:VMFGE]} && !(pe_req.op inside {VCOMPRESS, VRGATHER});
 
 
           // Request for vs1 operand (going to mask unit)
@@ -727,7 +742,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
           };
           // Request equal amount of vector elements per lane!
           // This is important because mask unit expects all lanes to send elements.
-          // NOTE: if instruction is VCOMPRESS, vs1 is a mask --> request less operands
+          // NOTE: if instruction is VCOMPRESS, vs1 is a mask --> request fewer operands
           if (pe_req.op inside {VCOMPRESS}) begin
             operand_request_i[MaskA].vl = pe_req.vl / (NrLanes * (8 << pe_req.vtype.vsew)); // MOIMFELD: TODO - check what happens to vl if sew != 64
             if ((pe_req.vl % (NrLanes * (8 << pe_req.vtype.vsew))) != 0) begin
@@ -739,7 +754,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
               operand_request_i[MaskA].vl += 1'b1;
             end
           end
-          operand_request_push[MaskA] = pe_req.use_vs1 && pe_req.op inside {VCOMPRESS};
+          operand_request_push[MaskA] = pe_req.use_vs1 && pe_req.op inside {VCOMPRESS, VRGATHER};
 
           // Request for vs2 operand (going to mask unit)
           operand_request_i[MaskB] = '{
@@ -749,7 +764,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
             scale_vl: pe_req.scale_vl,
             vtype   : pe_req.vtype,
             vstart  : vfu_operation_d.vstart,
-            hazard  : pe_req.hazard_vs2,
+            hazard  : pe_req.hazard_vs2 | pe_req.hazard_vd,
             default : '0
           };
           // Request equal amount of vector elements per lane!
@@ -758,7 +773,12 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
           if ((pe_req.vl % NrLanes) != 0) begin
             operand_request_i[MaskB].vl += 1'b1;
           end
-          operand_request_push[MaskB] = pe_req.use_vs2  && pe_req.op inside {VCOMPRESS};
+          operand_request_push[MaskB] = pe_req.use_vs2  && pe_req.op inside {VCOMPRESS, VRGATHER};
+
+          // Save operand request for further requests
+          if (pe_req.op inside {VRGATHER}) begin
+            operand_request_maskb_d = operand_request_i[MaskB];
+          end
 
           operand_request_i[MaskM] = '{
             id     : pe_req.id,
@@ -808,6 +828,8 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
 
       alu_vinsn_done_o  <= 1'b0;
       mfpu_vinsn_done_o <= 1'b0;
+
+      operand_request_maskb_q <= '0;
     end else begin
       vinsn_done_q    <= vinsn_done_d;
       vinsn_running_q <= vinsn_running_d;
@@ -817,6 +839,8 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
 
       alu_vinsn_done_o  <= alu_vinsn_done_d;
       mfpu_vinsn_done_o <= mfpu_vinsn_done_d;
+
+      operand_request_maskb_q <= operand_request_maskb_d;
     end
   end
 

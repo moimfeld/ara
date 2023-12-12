@@ -541,6 +541,9 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                   6'b001001: ara_req_d.op = ara_pkg::VAND;
                   6'b001010: ara_req_d.op = ara_pkg::VOR;
                   6'b001011: ara_req_d.op = ara_pkg::VXOR;
+                  6'b001100: begin
+                    ara_req_d.op = ara_pkg::VRGATHER;
+                  end
                   6'b010000: begin
                     ara_req_d.op = ara_pkg::VADC;
 

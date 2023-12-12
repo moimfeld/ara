@@ -31,6 +31,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
     input  elen_t    [NrLanes-1:0][NrMaskFUnits+3-1:0] masku_operand_i,
     input  logic     [NrLanes-1:0][NrMaskFUnits+3-1:0] masku_operand_valid_i,
     output logic     [NrLanes-1:0][NrMaskFUnits+3-1:0] masku_operand_ready_o,
+    output logic     [NrLanes-1:0]                     masku_operand_req_o,
     output logic     [NrLanes-1:0]                     masku_result_req_o,
     output vid_t     [NrLanes-1:0]                     masku_result_id_o,
     output vaddr_t   [NrLanes-1:0]                     masku_result_addr_o,
@@ -176,7 +177,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
   logic [         idx_width(MAXVL)-1:0] vcomp_vrgath_processed_element_vs2_cnt_d, vcomp_vrgath_processed_element_vs2_cnt_q; // counts number of elements processed by vcompress/vrgather instructions
   logic                                 vcomp_vrgath_result_valid; // result buffer can be written back to vreg
   logic                                 vcompress_stall_vs2_ready; // stall fetching mechanism for vs2
-  logic                                 vcompress_finished; // vcompress or vrgather instruction finished
+  logic                                 vcompress_finished, vrgather_finished; // vcompress or vrgather instruction finished
   logic [NrLanes-1:0][       ELENB-1:0] vrgath_be; // byte enable for vrgather
   // logic [                             ] vrgath_result_onehot_valid_d, vrgath_result_onehot_valid_q; // signal tracks valid result elements in the result vector of vrgath
 
@@ -437,6 +438,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
     mask                = '0;
     vcpop_operand       = '0;
     vcompress_finished                       = 1'b0;
+    vrgather_finished                        = 1'b0;
     total_input_elements                     = '0;
     vcomp_vrgath_result_vec_elements         = '0;
     vcomp_vrgath_result_element_cnt_d        = '0;
@@ -446,6 +448,9 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
     vcomp_vrgath_result_shuffled             = '0;
     vcomp_vrgath_result_valid                = '0;
     vcompress_stall_vs2_ready                = '0;
+    vrgath_be                                = '0;
+    masku_operand_req_o                      = '0;
+    masku_operand_vs1_ready_o                = '0;
     masku_operand_vs2_ready_o                = '0;
 
     if (vinsn_issue_valid) begin
@@ -652,6 +657,93 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
                 vcomp_vrgath_result_valid = 1'b1; // write back last result if result vector is not empty
               end
             end
+          end
+        end
+        VRGATHER: begin
+          // Preserve vgather state (because one result vector "slice" can take multiple cycles to compute)
+          vcomp_vrgath_result_element_cnt_d        = vcomp_vrgath_result_element_cnt_q;
+          vcomp_vrgath_processed_element_vs1_cnt_d = vcomp_vrgath_processed_element_vs1_cnt_q;
+          vcomp_vrgath_processed_element_vs2_cnt_d = vcomp_vrgath_processed_element_vs2_cnt_q;
+          vcomp_vrgath_result_d                    = vcomp_vrgath_result_q;
+
+          // initialize control signals
+          vcomp_vrgath_result_valid = 1'b0;
+          masku_operand_vs1_ready_o = '0;
+          masku_operand_vs2_ready_o = '0;
+          total_input_elements      = (NrLanes * ELEN) / (8 << vinsn_issue.vtype.vsew); // number of elements in input slice
+          vrgath_be                 = '0;
+          // initialize onehot valid for new vs1 slice MOIMFELD: NOTE - Can be used if the iteration should be stopped before receiving all acknowledgements
+          // if (vcomp_vrgath_processed_element_vs1_cnt_d == 0) begin
+          //   vrgath_result_onehot_valid_d = '0
+          //   unique case (vinsn_issue.vtype.vsew)
+          //     EW8 : vrgath_result_onehot_valid_d = 
+          //     EW16: vrgath_result_onehot_valid_d = 
+          //     EW32: vrgath_result_onehot_valid_d = 
+          //     EW64: vrgath_result_onehot_valid_d = 
+          //     default: ;
+          //   endcase
+          // end
+
+          // Only start/continue computing vcompress result once both operands are ready
+          if ((&masku_operand_vs1_valid_i) && (&masku_operand_vs2_valid_i)) begin
+            
+            // Update control signals
+            masku_operand_vs2_ready_o = '1; // By default, acknowledge masku_operand_vs2 (if it is valid)
+
+            // Perform gather operation by checking if any element index given by v1 exists in current vs2 slice
+            for (int i = 0; i < total_input_elements; i++) begin
+              // Extract indeces from vs1 vector slice
+              automatic logic [ELEN-1:0] elem_idx = '0;
+              unique case (vinsn_issue.vtype.vsew)
+                EW8 : elem_idx[ 7:0] = masku_operand_vs1_seq[i* 8 +:  8];
+                EW16: elem_idx[15:0] = masku_operand_vs1_seq[i*16 +: 16];
+                EW32: elem_idx[31:0] = masku_operand_vs1_seq[i*32 +: 32];
+                EW64: elem_idx[63:0] = masku_operand_vs1_seq[i*64 +: 64];
+                default: ;
+              endcase
+
+              // Check if indices given by vs1 exist in vs
+              if (((vcomp_vrgath_processed_element_vs2_cnt_q + i) < vinsn_issue.vl) && (elem_idx >= vcomp_vrgath_processed_element_vs2_cnt_q) && (elem_idx < (vcomp_vrgath_processed_element_vs2_cnt_q + total_input_elements))) begin
+                unique case (vinsn_issue.vtype.vsew) // case statement gathers the elements from vs2 and puts them into vd
+                  EW8 : vcomp_vrgath_result_d[i* 8 +:  8] = masku_operand_vs2_seq[(elem_idx%total_input_elements)* 8 +:  8];
+                  EW16: vcomp_vrgath_result_d[i*16 +: 16] = masku_operand_vs2_seq[(elem_idx%total_input_elements)*16 +: 16];
+                  EW32: vcomp_vrgath_result_d[i*32 +: 32] = masku_operand_vs2_seq[(elem_idx%total_input_elements)*32 +: 32];
+                  EW64: vcomp_vrgath_result_d[i*64 +: 64] = masku_operand_vs2_seq[(elem_idx%total_input_elements)*64 +: 64];
+                  default: ;
+                endcase
+                // vcomp_vrgath_result_element_cnt_d += 1'b1;// $display("at vs[%0d] = %0d, at %0dns", i, elem_idx, $time); // MOIMFELD: NOTE - Not needed for naive implementation where the core will ask for full pass though vs2 for ever vs1 slice
+              end
+            end
+
+            // Update processed elements of vs2 counter (vcomp_vrgath_processed_element_vs2_cnt_d)
+            vcomp_vrgath_processed_element_vs2_cnt_d += total_input_elements;
+
+            // Check if whole vs2 has been processed (if so, we can be sure that the result vector is complete and ready to be written back to the vector register)
+            vcomp_vrgath_result_valid = vcomp_vrgath_processed_element_vs2_cnt_d >= vinsn_issue.vl;
+
+            // If vrgather result is valid, do:
+            // - Update processed elements of vs1 counter(vcomp_vrgath_processed_element_vs1_cnt_d)
+            // - Acknowledge vs1 operand to receive next vs1 slice
+            // - Reset processed elements of vs2 counter
+            // - Ask for new operand (if instruction is not finished)
+            if (vcomp_vrgath_result_valid) begin
+              vcomp_vrgath_processed_element_vs1_cnt_d += total_input_elements;
+              vcomp_vrgath_result_element_cnt_d = vcomp_vrgath_processed_element_vs1_cnt_d; // vcomp_vrgath_result_element_cnt_d is needed for address computation during result writeback
+              masku_operand_vs1_ready_o = '1;
+              vcomp_vrgath_processed_element_vs2_cnt_d = '0;
+              masku_operand_req_o = '1; // MOIMFELD: TODO - This operand request should be guarded by the "finished" signal, because there should not be a new request if instruciton is finished
+              // MOIMFELD: TODO - Trigger "new vs2 pass here"
+              // MOIMFELD: TODO - byte enable signal should be computed here (i.e. vrgather masking) (for now we default to "write everything")
+              for (int unsigned lane = 0; lane < NrLanes; lane++) begin
+                vrgath_be = '1;
+              end
+            end
+
+            if (vcomp_vrgath_processed_element_vs1_cnt_d >= vinsn_issue.vl) begin
+              vrgather_finished = 1'b1;
+              masku_operand_req_o = '0; // Do not request a new operand if instruction is finished
+            end
+
           end
         end
         default: begin
@@ -911,7 +1003,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
         // Did we receive the operands?
         if (!result_queue_full && ((&(masku_operand_a_valid_i | fake_a_valid) &&
             (!vinsn_issue.use_vd_op || &masku_operand_vs1_valid_i)) || vcomp_vrgath_result_valid)) begin
-          if (!(vinsn_issue.op inside {VCOMPRESS})) begin
+          if (!(vinsn_issue.op inside {VCOMPRESS, VRGATHER})) begin
             // How many elements are we committing in total?
             // Since we are committing bits instead of bytes, we carry out the following calculation
             // with ceil(vl/8) instead.
@@ -956,11 +1048,10 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
 
               base_addr = vaddr(vinsn_issue.vd, NrLanes);
               addr_offset = ((vcomp_vrgath_result_element_cnt_d - total_input_elements) >> (int'(EW64) - vinsn_issue.vtype.vsew)) / NrLanes; // MOIMFELD: TODO - CHECK IF IT IS WORKING FOR DIFFERENT SEW and add comment on how this is computed
-              if ((vcomp_vrgath_result_element_cnt_d % total_input_elements) != '0) begin
+              if ((vcomp_vrgath_result_element_cnt_d % total_input_elements) != '0) begin // MOIMFELD: TODO - Maybe change condition to "... < lane", this would really take care of fringe elements
                 addr_offset += 1'b1;
               end
               // MOIMFELD: TODO - take care of fringe elements if result vector is not full --> do this in alu entry of VCOMPRESS and VRGATHER respectively and send signal to here that controls result writeback
-              $display("element_cnt=%0d for lane %0d, at time = %0d", element_cnt, lane, $time);
               result_queue_d[result_queue_write_pnt_q][lane] = '{
                 wdata: vcomp_vrgath_result_shuffled[ELEN * lane +: ELEN],
                 be   : vinsn_issue.op inside {VCOMPRESS} ? be(element_cnt, vinsn_issue.vtype.vsew) : vrgath_be,
@@ -1012,7 +1103,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
             issue_cnt_d = issue_cnt_q - (1 << (int'(EW64) - vinsn_issue.vtype.vsew));
             if ((vinsn_issue.vl-issue_cnt_d)*4 >= vinsn_issue.vl)
               issue_cnt_d = '0;
-          end else if (vinsn_issue.op inside {VCOMPRESS}) begin
+          end else if (vinsn_issue.op inside {VCOMPRESS, VRGATHER}) begin
             if (vcomp_vrgath_result_valid) begin
 
               result_queue_valid_d[result_queue_write_pnt_q] = {NrLanes{1'b1}};
@@ -1162,7 +1253,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
     // vcompress does not have a fixed number of results. Therefore, the commit counter
     // cannot be reused as an indicator for when the instruciton is done. For this reason
     // the signal 'vcompress_finished' is introduced.
-    if ((vinsn_issue.op inside {VCOMPRESS}) && vcompress_finished) begin
+    if ((vinsn_issue.op inside {VCOMPRESS, VRGATHER}) && (vcompress_finished || vrgather_finished)) begin
       commit_cnt_d = '0;
       issue_cnt_d  = '0;
       read_cnt_d   = '0;
