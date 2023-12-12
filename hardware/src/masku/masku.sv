@@ -173,17 +173,17 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
 
 
   // VCOMPRESS and VRGATHER signals
-  logic [             NrLanes*ELEN-1:0] vcomp_vrgath_result_d, vcomp_vrgath_result_q, vcomp_vrgath_result_shuffled;
-  logic [idx_width(NrLanes*ELEN/8)-1:0] vcomp_vrgath_result_vec_elements; // counts number of elements in result vector
-  logic [  idx_width(NrLanes*ELEN/8):0] total_input_elements; // Helper control signal to clean code (number of elements per masku_operand - depends on vsew and NrLanes)
-  logic [         idx_width(MAXVL)-1:0] vcomp_vrgath_result_element_cnt_d, vcomp_vrgath_result_element_cnt_q; // counts total number of result elements
-  logic [         idx_width(MAXVL)-1:0] vcomp_vrgath_processed_element_vs1_cnt_d, vcomp_vrgath_processed_element_vs1_cnt_q; // counts number of elements processed by vrgather instructions - unused by vcompress
-  logic [         idx_width(MAXVL)-1:0] vcomp_vrgath_processed_element_vs2_cnt_d, vcomp_vrgath_processed_element_vs2_cnt_q; // counts number of elements processed by vcompress/vrgather instructions
-  logic                                 vcomp_vrgath_result_valid; // result buffer can be written back to vreg
-  logic                                 vcompress_stall_vs2_ready; // stall fetching mechanism for vs2
-  logic                                 vcompress_finished, vrgather_finished; // vcompress or vrgather instruction finished
-  logic [            NrLanes*ELENB-1:0] vrgath_be; // byte enable for vrgather
-  // logic [                             ] vrgath_result_onehot_valid_d, vrgath_result_onehot_valid_q; // signal tracks valid result elements in the result vector of vrgath
+  logic [            NrLanes*ELEN-1:0] vcomp_vrgath_result_d, vcomp_vrgath_result_q, vcomp_vrgath_result_shuffled;
+  logic [idx_width(NrLanes*ELENB)-1:0] vcomp_vrgath_result_vec_elements; // counts number of elements in result vector
+  logic [  idx_width(NrLanes*ELENB):0] total_input_elements; // Helper control signal to clean code (number of elements per masku_operand - depends on vsew and NrLanes)
+  logic [          idx_width(MAXVL):0] current_vlmax; // Helper singnal that is set to vlmax for the current SEW setting
+  logic [          idx_width(MAXVL):0] vcomp_vrgath_result_element_cnt_d, vcomp_vrgath_result_element_cnt_q; // counts total number of result elements
+  logic [          idx_width(MAXVL):0] vcomp_vrgath_processed_element_vs1_cnt_d, vcomp_vrgath_processed_element_vs1_cnt_q; // counts number of elements processed by vrgather instructions - unused by vcompress
+  logic [          idx_width(MAXVL):0] vcomp_vrgath_processed_element_vs2_cnt_d, vcomp_vrgath_processed_element_vs2_cnt_q; // counts number of elements processed by vcompress/vrgather instructions
+  logic                                vcomp_vrgath_result_valid; // result buffer can be written back to vreg
+  logic                                vcompress_stall_vs2_ready; // stall fetching mechanism for vs2
+  logic                                vcompress_finished, vrgather_finished; // vcompress or vrgather instruction finished
+  logic [           NrLanes*ELENB-1:0] vrgath_be; // byte enable for vrgather
 
   // Control flow for mask operands
   for (genvar lane = 0; lane < NrLanes; lane++) begin: gen_unpack_masku_operands
@@ -444,6 +444,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
     vcompress_finished                       = 1'b0;
     vrgather_finished                        = 1'b0;
     total_input_elements                     = '0;
+    current_vlmax                            = '0;
     vcomp_vrgath_result_vec_elements         = '0;
     vcomp_vrgath_result_element_cnt_d        = '0;
     vcomp_vrgath_processed_element_vs1_cnt_d = '0;
@@ -676,18 +677,11 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
           masku_operand_vs2_ready_o = '0;
           total_input_elements      = (NrLanes * ELEN) / (8 << vinsn_issue.vtype.vsew); // number of elements in input slice
           vrgath_be                 = '0;
-          // initialize onehot valid for new vs1 slice MOIMFELD: NOTE - Can be used if the iteration should be stopped before receiving all acknowledgements
-          // if (vcomp_vrgath_processed_element_vs1_cnt_d == 0) begin
-          //   vrgath_result_onehot_valid_d = '0
-          //   unique case (vinsn_issue.vtype.vsew)
-          //     EW8 : vrgath_result_onehot_valid_d = 
-          //     EW16: vrgath_result_onehot_valid_d = 
-          //     EW32: vrgath_result_onehot_valid_d = 
-          //     EW64: vrgath_result_onehot_valid_d = 
-          //     default: ;
-          //   endcase
-          // end
-
+          if (vinsn_issue.vtype.vlmul[2]) begin // this if statement checks if LMUL is a fraction (i.e. 1/2, 1/4 or 1/8)
+            current_vlmax = (MAXVL >> (11 - vinsn_issue.vtype.vlmul[2:0])) >> vinsn_issue.vtype.vsew; // compute current_vlmax for LMUL = 1/2 or 1/4 or 1/8
+          end else begin
+            current_vlmax = (MAXVL >> (3  - vinsn_issue.vtype.vlmul[1:0])) >> vinsn_issue.vtype.vsew; // compute current_vlmax for LMUL = 1, 2, 4, 8
+          end
           // Only start/continue computing vcompress result once both operands are ready
           if ((&masku_operand_vs1_valid_i) && (&masku_operand_vs2_valid_i)) begin
             
@@ -723,14 +717,14 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
             vcomp_vrgath_processed_element_vs2_cnt_d += total_input_elements;
 
             // Check if whole vs2 has been processed (if so, we can be sure that the result vector is complete and ready to be written back to the vector register)
-            vcomp_vrgath_result_valid = vcomp_vrgath_processed_element_vs2_cnt_d >= vinsn_issue.vl;
+            vcomp_vrgath_result_valid = vcomp_vrgath_processed_element_vs2_cnt_d >= current_vlmax;
 
             // If vrgather result is valid, do:
             // - Compute byte enable signal (before updating vs1 pointer)
             // - Update processed elements of vs1 counter(vcomp_vrgath_processed_element_vs1_cnt_d)
             // - Acknowledge vs1 operand to receive next vs1 slice
             // - Reset processed elements of vs2 counter
-            // - Ask for new operand (if instruction is not finished)
+            // - Ask for new operand (signal will be deasserted if instruction is finished, i.e. no more operands are needed)
             if (vcomp_vrgath_result_valid) begin
               // Compute byte enable signal
               for (int b = 0; b < ELENB * NrLanes; b++) begin

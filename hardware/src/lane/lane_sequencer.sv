@@ -769,9 +769,17 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
           };
           // Request equal amount of vector elements per lane!
           // This is important because mask unit expects all lanes to send elements.
-          operand_request_i[MaskB].vl = pe_req.vl / NrLanes;
-          if ((pe_req.vl % NrLanes) != 0) begin
-            operand_request_i[MaskB].vl += 1'b1;
+          if (pe_req.op inside {VCOMPRESS}) begin
+            operand_request_i[MaskB].vl = pe_req.vl / NrLanes;
+            if ((pe_req.vl % NrLanes) != 0) begin
+              operand_request_i[MaskB].vl += 1'b1;
+            end
+          end else begin
+            if (pe_req.vtype.vlmul[2]) begin // this if statement checks if LMUL is a fraction (i.e. 1/2, 1/4 or 1/8)
+              operand_request_i[MaskB].vl = ((MAXVL >> (11 - pe_req.vtype.vlmul[2:0])) >> pe_req.vtype.vsew) / NrLanes; // compute current_vlmax for LMUL = 1/2 or 1/4 or 1/8
+            end else begin
+              operand_request_i[MaskB].vl = ((MAXVL >> (3  - pe_req.vtype.vlmul[1:0])) >> pe_req.vtype.vsew) / NrLanes; // compute current_vlmax for LMUL = 1, 2, 4, 8
+            end
           end
           operand_request_push[MaskB] = pe_req.use_vs2  && pe_req.op inside {VCOMPRESS, VRGATHER};
 
