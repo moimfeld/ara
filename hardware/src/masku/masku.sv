@@ -953,8 +953,10 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
         issue_cnt_d = issue_cnt_q - (W_CPOP/(8 << vinsn_issue.vtype.vsew));
 
         // abruptly stop processing elements if vl is reached
-        if (iteration_count_d >= (((8 << vinsn_issue.vtype.vsew)*vinsn_issue.vl)/(W_CPOP)) || (!vfirst_empty && (vinsn_issue.op == VFIRST))) begin
+        if (iteration_count_d >= (vinsn_issue.vl/(W_CPOP)) || (!vfirst_empty && (vinsn_issue.op == VFIRST))) begin
           issue_cnt_d = '0;
+          commit_cnt_d = '0;
+          read_cnt_d ='0;
           masku_operand_a_ready_o = masku_operand_a_valid_i;
           if (!vinsn_issue.vm) begin 
             masku_operand_m_ready_o = '1;
@@ -965,8 +967,8 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
         vfirst_count_d = vfirst_count_q + vfirst_count;
 
         // if this is the last beat, commit the result to the scalar_result queue
-        if ((iteration_count_d >= (((8 << vinsn_issue.vtype.vsew)*vinsn_issue.vl)/(W_CPOP)) && vinsn_issue.op == VCPOP) ||
-            (iteration_count_d >= (((8 << vinsn_issue.vtype.vsew)*vinsn_issue.vl)/(W_VFIRST)) && vinsn_issue.op == VFIRST) ||
+        if ((iteration_count_d >= (vinsn_issue.vl/W_CPOP) && vinsn_issue.op == VCPOP) ||
+            (iteration_count_d >= (vinsn_issue.vl/W_VFIRST) && vinsn_issue.op == VFIRST) ||
             (!vfirst_empty && (vinsn_issue.op == VFIRST))) begin
           result_scalar_d = (vinsn_issue.op == VCPOP) ? popcount_d : (vfirst_empty) ? -1 : vfirst_count_d;
           result_scalar_valid_d = '1;
