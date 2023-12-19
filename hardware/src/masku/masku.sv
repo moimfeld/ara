@@ -166,6 +166,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
   logic  [$clog2(W_VFIRST)-1:0]          vfirst_count;
   logic  [$clog2(VLEN)-1:0]              vfirst_count_d, vfirst_count_q;
   logic                                  vfirst_empty;
+  logic  [NrLanes-1:0]                   vcpop_vfirst_vs2_ready;
   // counter to keep track of how many slices of the vcpop_operand have been processed
   logic [$clog2(MAX_W_CPOP_VFIRST):0]   vcpop_slice_cnt_d, vcpop_slice_cnt_q;
   logic [W_CPOP-1:0]                    vcpop_slice;
@@ -181,11 +182,14 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
   logic [          idx_width(MAXVL):0] vcomp_vrgath_processed_element_vs1_cnt_d, vcomp_vrgath_processed_element_vs1_cnt_q; // counts number of elements processed by vrgather instructions - unused by vcompress
   logic [          idx_width(MAXVL):0] vcomp_vrgath_processed_element_vs2_cnt_d, vcomp_vrgath_processed_element_vs2_cnt_q; // counts number of elements processed by vcompress/vrgather instructions
   logic                                vcomp_vrgath_result_valid; // result buffer can be written back to vreg
+  logic  [NrLanes-1:0]                 vcomp_vrgath_vs2_ready;
   logic                                vcompress_stall_vs2_ready; // stall fetching mechanism for vs2
   logic                                vcompress_finished, vrgather_finished; // vcompress or vrgather instruction finished
   logic [           NrLanes*ELENB-1:0] vrgath_be; // byte enable for vrgather
 
   // Control flow for mask operands
+
+  assign masku_operand_vs2_ready_o = vcomp_vrgath_vs2_ready | vcpop_vfirst_vs2_ready;
   for (genvar lane = 0; lane < NrLanes; lane++) begin: gen_unpack_masku_operands
     // immediately acknowledge operands coming from functional units
     assign masku_operand_a_valid_i[lane] = masku_operand_valid_i[lane][3 + masku_operand_fu];
@@ -372,7 +376,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
 
   // iteration count for masked instrctions
   always_comb begin
-    if (vinsn_issue_valid && &masku_operand_a_valid_i) begin
+    if (vinsn_issue_valid && (&masku_operand_a_valid_i || &masku_operand_vs2_valid_i)) begin
       iteration_count_d = iteration_count_q + 1'b1;
     end else begin
       iteration_count_d = iteration_count_q;
@@ -456,7 +460,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
     vrgath_be                                = '0;
     masku_operand_req_o                      = '0;
     masku_operand_vs1_ready_o                = '0;
-    masku_operand_vs2_ready_o                = '0;
+    vcomp_vrgath_vs2_ready                   = '0;
 
     if (vinsn_issue_valid) begin
 
@@ -585,7 +589,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
           end
         end
         [VCPOP:VFIRST] : begin
-          vcpop_operand = (!vinsn_issue.vm) ? masku_operand_a & bit_enable_mask : masku_operand_a;
+          vcpop_operand = (!vinsn_issue.vm) ? masku_operand_vs2 & bit_enable_mask : masku_operand_vs2;
         end
         // NOTE: Current VCOMPRESS implementation assumes that result queue is always ready to accept results! If result queue is not ready for the result,
         //       this implementation will break
@@ -599,7 +603,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
           vcomp_vrgath_result_valid = 1'b0;
           vcompress_stall_vs2_ready = 1'b0;
           masku_operand_vs1_ready_o = '0;
-          masku_operand_vs2_ready_o = '0;
+          vcomp_vrgath_vs2_ready = '0;
           total_input_elements      = (NrLanes * ELEN) / (8 << vinsn_issue.vtype.vsew);
 
           // Assign vcomp_vrgath_result_vec_elements (# valid result elements in result vector)
@@ -612,7 +616,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
 
           // Only start/continue computing vcompress result if both operands are ready
           if ((&masku_operand_vs1_valid_i) && (&masku_operand_vs2_valid_i)) begin
-            masku_operand_vs2_ready_o = '1; // by default, receive new operand (only if vcomp_vrgath_result_d runs full keep )
+            vcomp_vrgath_vs2_ready = '1; // by default, receive new operand (only if vcomp_vrgath_result_d runs full keep )
             // Iterate over every element of the incoming vs2 vector section and copy active elements to destination vector
             for (int i = 0; i < total_input_elements; i++) begin
               if (masku_operand_vs1_seq[vcomp_vrgath_processed_element_vs2_cnt_d+i]) begin
@@ -632,7 +636,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
                 end
 
                 // Check if vcomp_vrgath_result_d is full --> if full, result should be written back to registerfile
-                vcomp_vrgath_result_valid = vcomp_vrgath_result_vec_elements == total_input_elements;
+                vcomp_vrgath_result_valid = vcomp_vrgath_result_vec_elements == total_input_elements; // MOIMFELD: TODO - vcomp_vrgath_result_vec_elements can experience overflow for longest vector
               end
             end
             // MOIMFELD: This line can possibly still create issues, because it gets incremented even if not all elements have been processed
@@ -640,7 +644,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
 
             // Update control signals
             if (vcompress_stall_vs2_ready) begin
-              masku_operand_vs2_ready_o = '0; // do not request new operand if old operand was not fully processed
+              vcomp_vrgath_vs2_ready = '0; // do not request new operand if old operand was not fully processed
             end
 
             // For vcompress, the vs2 counter also reflects how many elements were processed of vs1 (unlike for vrgather where an extra counter is needed)
@@ -657,7 +661,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
             if (vcomp_vrgath_processed_element_vs2_cnt_d >= vinsn_issue.vl) begin
               vcompress_finished = 1'b1;
               masku_operand_vs1_ready_o = '1; // acknowledge last operand
-              masku_operand_vs2_ready_o = '1; // acknowledge last operand
+              vcomp_vrgath_vs2_ready = '1; // acknowledge last operand
               if (vcomp_vrgath_result_vec_elements >= '0) begin
                 vcomp_vrgath_result_valid = 1'b1; // write back last result if result vector is not empty
               end
@@ -674,7 +678,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
           // initialize control signals
           vcomp_vrgath_result_valid = 1'b0;
           masku_operand_vs1_ready_o = '0;
-          masku_operand_vs2_ready_o = '0;
+          vcomp_vrgath_vs2_ready = '0;
           total_input_elements      = (NrLanes * ELEN) / (8 << vinsn_issue.vtype.vsew); // number of elements in input slice
           vrgath_be                 = '0;
           if (vinsn_issue.vtype.vlmul[2]) begin // this if statement checks if LMUL is a fraction (i.e. 1/2, 1/4 or 1/8)
@@ -682,11 +686,12 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
           end else begin
             current_vlmax = (MAXVL >> (3  - vinsn_issue.vtype.vlmul[1:0])) >> vinsn_issue.vtype.vsew; // compute current_vlmax for LMUL = 1, 2, 4, 8
           end
+
           // Only start/continue computing vcompress result once both operands are ready
           if ((&masku_operand_vs1_valid_i) && (&masku_operand_vs2_valid_i)) begin
             
             // Update control signals
-            masku_operand_vs2_ready_o = '1; // By default, acknowledge masku_operand_vs2 (if it is valid)
+            vcomp_vrgath_vs2_ready = '1; // By default, acknowledge masku_operand_vs2 (if it is valid)
 
             // Perform gather operation by checking if any element index given by v1 exists in current vs2 slice
             for (int i = 0; i < total_input_elements; i++) begin
@@ -931,19 +936,21 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
     // Calculate scalar results //
     //////////////////////////////
 
+    vcpop_vfirst_vs2_ready = 1'b0;
+
     // Is there an instruction ready to be issued?
     if (vinsn_issue_valid && vd_scalar(vinsn_issue.op)) begin
-      if (&(masku_operand_a_valid_i | fake_a_valid) && (&masku_operand_m_valid_i || vinsn_issue.vm)) begin
+      if (&(masku_operand_vs2_valid_i | fake_a_valid) && (&masku_operand_m_valid_i || vinsn_issue.vm)) begin
 
         // increment slice counter
         vcpop_slice_cnt_d = vcpop_slice_cnt_q + 1'b1;
 
         // request new operand (by completing ready-valid handshake) once all slices have been processed
-        masku_operand_a_ready_o = 1'b0;
+        vcpop_vfirst_vs2_ready = 1'b0;
         if (((vcpop_slice_cnt_q == N_SLICES_CPOP - 1) && vinsn_issue.op == VCPOP) ||
             ((vcpop_slice_cnt_q == N_SLICES_VFIRST-1) && vinsn_issue.op == VFIRST)) begin
           vcpop_slice_cnt_d       = '0;
-          masku_operand_a_ready_o = masku_operand_a_valid_i;
+          vcpop_vfirst_vs2_ready = masku_operand_vs2_valid_i;
           if (!vinsn_issue.vm) begin 
             masku_operand_m_ready_o = '1;
           end
@@ -957,7 +964,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
           issue_cnt_d = '0;
           commit_cnt_d = '0;
           read_cnt_d ='0;
-          masku_operand_a_ready_o = masku_operand_a_valid_i;
+          vcpop_vfirst_vs2_ready = masku_operand_vs2_valid_i;
           if (!vinsn_issue.vm) begin 
             masku_operand_m_ready_o = '1;
           end
@@ -981,7 +988,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
           vcpop_slice_cnt_d = '0;
 
           // acknowledge operand a
-          masku_operand_a_ready_o = masku_operand_a_valid_i;
+          vcpop_vfirst_vs2_ready = masku_operand_vs2_valid_i;
           if (!vinsn_issue.vm) begin 
             masku_operand_m_ready_o = '1;
           end
