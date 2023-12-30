@@ -187,8 +187,8 @@ module ara import ara_pkg::*; #(
   // Scalar move support
   always_comb begin
     masku_operand_ready_lane = masku_operand_ready_masku;
-    // The scalar move fetches the data from lane 0 - MaskB OpQueue (idx == 1)
-    masku_operand_ready_lane[0][1] = masku_operand_ready_masku[0][1] | pe_scalar_resp_ready;
+    // The scalar move fetches the data from lane 0 - MaskB OpQueue (idx == 2)
+    masku_operand_ready_lane[0][2] = masku_operand_ready_masku[0][2] | pe_scalar_resp_ready;
   end
 
   /////////////
