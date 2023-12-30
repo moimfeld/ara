@@ -774,7 +774,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
             if ((pe_req.vl % NrLanes) != 0) begin
               operand_request_i[MaskB].vl += 1'b1;
             end
-          end else if (pe_req.op inside {VCOMPRESS}) begin // set vl to VLMAX
+          end else if (pe_req.op inside {VRGATHER}) begin // set vl to VLMAX
             if (pe_req.vtype.vlmul[2]) begin // this if statement checks if LMUL is a fraction (i.e. 1/2, 1/4 or 1/8)
               operand_request_i[MaskB].vl = ((MAXVL >> (11 - pe_req.vtype.vlmul[2:0])) >> pe_req.vtype.vsew) / NrLanes; // compute current_vlmax for LMUL = 1/2 or 1/4 or 1/8
             end else begin
