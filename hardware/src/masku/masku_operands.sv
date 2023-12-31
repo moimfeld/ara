@@ -117,7 +117,7 @@ module masku_operands import ara_pkg::*; import rvv_pkg::*; #(
 
       // Generate bit-level mask
       bit_enable_mask_o[8*src_operand_byte_shuffle_index +: 8] = shuffled_vl_bit_mask[8*src_operand_byte_shuffle_index +: 8];
-      if (!vinsn_issue_i.vm) begin
+      if (!vinsn_issue_i.vm && !(vinsn_issue_i.op inside {VMADC, VMSBC})) begin // exception for VMADC and VMSBC, because they use the mask register as a source operand (and not as a mask)
         bit_enable_mask_o[8*src_operand_byte_shuffle_index +: 8] &= masku_operand_m_o[mask_operand_byte_shuffle_lane_index][8*mask_operand_byte_shuffle_lane_offset +: 8];
       end
     end
