@@ -614,31 +614,85 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
             vcomp_vrgath_result_d = '0;
           end
 
+          vcomp_vrgath_vs2_ready = '1; // by default, receive new operand (if vcomp_vrgath_result_d is full keep old operand for another cycle)
+          // Iterate over every element of the incoming vs2 vector section and copy active elements to destination vector
+
           // Only start/continue computing vcompress result if both operands are ready
           if ((&masku_operand_vs1_valid_i) && (&masku_operand_vs2_valid_i)) begin
-            vcomp_vrgath_vs2_ready = '1; // by default, receive new operand (only if vcomp_vrgath_result_d runs full keep )
-            // Iterate over every element of the incoming vs2 vector section and copy active elements to destination vector
-            for (int i = 0; i < total_input_elements; i++) begin
-              if (masku_operand_vs1_seq[vcomp_vrgath_processed_element_vs2_cnt_d+i]) begin
-                // copy element from source vector to (compressed) destination vector (ONLY IF vcomp_vrgath_result_d IS NOT FULL)
-                if (!vcomp_vrgath_result_valid) begin
-                  unique case (vinsn_issue.vtype.vsew)
-                    EW8 : vcomp_vrgath_result_d[vcomp_vrgath_result_vec_elements* 8 +:  8] = masku_operand_vs2_seq[i* 8 +:  8];
-                    EW16: vcomp_vrgath_result_d[vcomp_vrgath_result_vec_elements*16 +: 16] = masku_operand_vs2_seq[i*16 +: 16];
-                    EW32: vcomp_vrgath_result_d[vcomp_vrgath_result_vec_elements*32 +: 32] = masku_operand_vs2_seq[i*32 +: 32];
-                    EW64: vcomp_vrgath_result_d[vcomp_vrgath_result_vec_elements*64 +: 64] = masku_operand_vs2_seq[i*64 +: 64];
-                    default: ; // Not sure what should be the default
-                  endcase
-                  vcomp_vrgath_result_element_cnt_d += 1'b1; // Note: Assignment depends on previous iteration of the for-loop --> this loop generates long combinational paths (might be suboptimal for timing)
-                  vcomp_vrgath_result_vec_elements  += 1'b1; // update vcomp_vrgath_result_vec_elements
-                end else begin
-                  vcompress_stall_vs2_ready = 1'b1; // if there is another active element after the vcomp_vrgath_result_d is full, we must keep vs2 for another cycle, such that these active elements are not lost
-                end
+            // IDEA: must make loop-iterations independent of each other (otherwise combinational paths become too long) and also remove variable loop bounds
+            unique case (vinsn_issue.vtype.vsew)
+              EW8 : begin
+                for (int i = 0; i < NrLanes * ELEN / 8; i++) begin
+                  if (masku_operand_vs1_seq[vcomp_vrgath_processed_element_vs2_cnt_d+i]) begin
+                    // copy element from source vector to (compressed) destination vector (ONLY IF vcomp_vrgath_result_d IS NOT FULL)
+                    if (!vcomp_vrgath_result_valid) begin
+                      vcomp_vrgath_result_d[vcomp_vrgath_result_vec_elements*8 +: 8] = masku_operand_vs2_seq[i*8 +: 8];
+                      vcomp_vrgath_result_element_cnt_d += 1'b1; // Note: Assignment depends on previous iteration of the for-loop --> this loop generates long combinational paths (might be suboptimal for timing)
+                      vcomp_vrgath_result_vec_elements  += 1'b1; // update vcomp_vrgath_result_vec_elements
+                    end else begin
+                      vcompress_stall_vs2_ready = 1'b1; // if there is another active element after the vcomp_vrgath_result_d is full, we must keep vs2 for another cycle, such that these active elements are not lost
+                    end
 
-                // Check if vcomp_vrgath_result_d is full --> if full, result should be written back to registerfile
-                vcomp_vrgath_result_valid = vcomp_vrgath_result_vec_elements == total_input_elements; // MOIMFELD: TODO - vcomp_vrgath_result_vec_elements can experience overflow for longest vector
+                    // Check if vcomp_vrgath_result_d is full --> if full, result should be written back to registerfile
+                    vcomp_vrgath_result_valid = vcomp_vrgath_result_vec_elements == total_input_elements; // MOIMFELD: TODO - vcomp_vrgath_result_vec_elements can experience overflow for longest vector
+                  end
+                end
               end
-            end
+              EW16: begin
+                for (int i = 0; i < NrLanes * ELEN / 16; i++) begin
+                  if (masku_operand_vs1_seq[vcomp_vrgath_processed_element_vs2_cnt_d+i]) begin
+                    // copy element from source vector to (compressed) destination vector (ONLY IF vcomp_vrgath_result_d IS NOT FULL)
+                    if (!vcomp_vrgath_result_valid) begin
+                      vcomp_vrgath_result_d[vcomp_vrgath_result_vec_elements*16 +: 16] = masku_operand_vs2_seq[i*16 +: 16];
+                      vcomp_vrgath_result_element_cnt_d += 1'b1; // Note: Assignment depends on previous iteration of the for-loop --> this loop generates long combinational paths (might be suboptimal for timing)
+                      vcomp_vrgath_result_vec_elements  += 1'b1; // update vcomp_vrgath_result_vec_elements
+                    end else begin
+                      vcompress_stall_vs2_ready = 1'b1; // if there is another active element after the vcomp_vrgath_result_d is full, we must keep vs2 for another cycle, such that these active elements are not lost
+                    end
+
+                    // Check if vcomp_vrgath_result_d is full --> if full, result should be written back to registerfile
+                    vcomp_vrgath_result_valid = vcomp_vrgath_result_vec_elements == total_input_elements; // MOIMFELD: TODO - vcomp_vrgath_result_vec_elements can experience overflow for longest vector
+                  end
+                end
+              end
+              EW32: begin
+                for (int i = 0; i < NrLanes * ELEN / 32; i++) begin
+                  if (masku_operand_vs1_seq[vcomp_vrgath_processed_element_vs2_cnt_d+i]) begin
+                    // copy element from source vector to (compressed) destination vector (ONLY IF vcomp_vrgath_result_d IS NOT FULL)
+                    if (!vcomp_vrgath_result_valid) begin
+                      vcomp_vrgath_result_d[vcomp_vrgath_result_vec_elements*32 +: 32] = masku_operand_vs2_seq[i*32 +: 32];
+                      vcomp_vrgath_result_element_cnt_d += 1'b1; // Note: Assignment depends on previous iteration of the for-loop --> this loop generates long combinational paths (might be suboptimal for timing)
+                      vcomp_vrgath_result_vec_elements  += 1'b1; // update vcomp_vrgath_result_vec_elements
+                    end else begin
+                      vcompress_stall_vs2_ready = 1'b1; // if there is another active element after the vcomp_vrgath_result_d is full, we must keep vs2 for another cycle, such that these active elements are not lost
+                    end
+
+                    // Check if vcomp_vrgath_result_d is full --> if full, result should be written back to registerfile
+                    vcomp_vrgath_result_valid = vcomp_vrgath_result_vec_elements == total_input_elements; // MOIMFELD: TODO - vcomp_vrgath_result_vec_elements can experience overflow for longest vector
+                  end
+                end
+              end
+              EW64: begin
+                for (int i = 0; i < NrLanes * ELEN / 64; i++) begin
+                  if (masku_operand_vs1_seq[vcomp_vrgath_processed_element_vs2_cnt_d+i]) begin
+                    // copy element from source vector to (compressed) destination vector (ONLY IF vcomp_vrgath_result_d IS NOT FULL)
+                    if (!vcomp_vrgath_result_valid) begin
+                      vcomp_vrgath_result_d[vcomp_vrgath_result_vec_elements*64 +: 64] = masku_operand_vs2_seq[i*64 +: 64];
+                      vcomp_vrgath_result_element_cnt_d += 1'b1; // Note: Assignment depends on previous iteration of the for-loop --> this loop generates long combinational paths (might be suboptimal for timing)
+                      vcomp_vrgath_result_vec_elements  += 1'b1; // update vcomp_vrgath_result_vec_elements
+                    end else begin
+                      vcompress_stall_vs2_ready = 1'b1; // if there is another active element after the vcomp_vrgath_result_d is full, we must keep vs2 for another cycle, such that these active elements are not lost
+                    end
+
+                    // Check if vcomp_vrgath_result_d is full --> if full, result should be written back to registerfile
+                    vcomp_vrgath_result_valid = vcomp_vrgath_result_vec_elements == total_input_elements; // MOIMFELD: TODO - vcomp_vrgath_result_vec_elements can experience overflow for longest vector
+                  end
+                end
+              end
+              default: ; // Not sure what should be the default
+            endcase
+
+
             // MOIMFELD: This line can possibly still create issues, because it gets incremented even if not all elements have been processed
             vcomp_vrgath_processed_element_vs2_cnt_d += total_input_elements;
 
