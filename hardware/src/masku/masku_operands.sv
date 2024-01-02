@@ -70,7 +70,7 @@ module masku_operands import ara_pkg::*; import rvv_pkg::*; #(
         automatic int deshuffle_m_idx = deshuffle_index(b, NrLanes, vinsn_issue_i.eew_vmask);
         automatic int lane_idx    = b / ELEN_BYTES; // rounded down to nearest integer
         automatic int lane_offset = b % ELEN_BYTES;
-        masku_operand_alu_seq_o[8*deshuffle_idx +: 8] = masku_operand_vs1_o[lane_idx][8*lane_offset +: 8];
+        masku_operand_alu_seq_o[8*deshuffle_idx +: 8] = masku_operand_alu_o[lane_idx][8*lane_offset +: 8];
         masku_operand_vs1_seq_o[8*deshuffle_idx +: 8] = masku_operand_vs1_o[lane_idx][8*lane_offset +: 8];
         masku_operand_vs2_seq_o[8*deshuffle_idx +: 8] = masku_operand_vs2_o[lane_idx][8*lane_offset +: 8];
         masku_operand_m_seq_o[8*deshuffle_m_idx +: 8] = masku_operand_m_o[lane_idx][8*lane_offset +: 8];
