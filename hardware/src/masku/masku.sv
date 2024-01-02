@@ -875,6 +875,10 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
   // Information about which is the target FU of the request
   assign masku_operand_fu = (vinsn_issue.op inside {[VMFEQ:VMFGE]}) ? MaskFUMFpu : MaskFUAlu;
 
+  // Byte enable for the result queue
+  logic [NrLanes*ELENB-1:0] result_queue_be_seq;
+  logic [NrLanes*ELENB-1:0] result_queue_be;
+
   always_comb begin: p_masku
     // Maintain state
     vinsn_queue_d  = vinsn_queue_q;
@@ -1080,6 +1084,9 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
 
     // MOIMFELD: Handling vcompress result writeback  -- TODO: CLEAN - lots of code repretition at the moment!!!!!
 
+    result_queue_be = '1;
+    result_queue_be_seq = '1;
+
     // Is there an instruction ready to be issued?
     if (vinsn_issue_valid && !vd_scalar(vinsn_issue.op)) begin
       // This instruction executes on the Mask Unit
@@ -1105,6 +1112,36 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
             // At this stage, acknowledge only the first operand, "a", coming from the ALU/VMFpu.
             masku_operand_a_ready_o = masku_operand_a_valid_i;
 
+            if (!vinsn_issue.vm) begin
+              unique case (vinsn_issue.vtype.vsew)
+                EW8 : result_queue_be_seq = masku_operand_m_seq[NrLanes*ELENB-1:0]; // MOIMFELD: NOTE - this does only take the first writeback into account (use iteration_q to compute the correct byte enable signal)
+                EW16: begin
+                  for (int i = 0; i < NrLanes * ELENB / 2; i++) begin
+                    result_queue_be_seq[2*i +: 2] = {2{bit_enable_mask[i]}};
+                  end
+                end
+                EW32: begin
+                  for (int i = 0; i < NrLanes * ELENB / 4; i++) begin
+                    result_queue_be_seq[4*i +: 4] = {4{bit_enable_mask[i]}};
+                  end
+                end
+                EW64: begin
+                  for (int i = 0; i < NrLanes * ELENB / 8; i++) begin
+                    result_queue_be_seq[8*i +: 8] = {8{bit_enable_mask[i]}};
+                  end
+                end
+                default: ; // Not sure what should be the default
+              endcase
+              for (int i = 0; i < NrLanes*ELENB; i++) begin
+                result_queue_be[shuffle_index(i, NrLanes, vinsn_issue.vtype.vsew)] = result_queue_be_seq[i];
+              end
+            end
+
+            if (vinsn_issue.op inside {[VMSBF: VMSIF], VID}) begin
+              result_queue_be = '1;
+            end
+
+
             // Store the result in the operand queue
             for (int unsigned lane = 0; lane < NrLanes; lane++) begin
               // How many elements are we committing in this lane?
@@ -1114,7 +1151,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
 
               result_queue_d[result_queue_write_pnt_q][lane] = '{
                 wdata: result_queue_q[result_queue_write_pnt_q][lane].wdata | alu_result[lane],
-                be   : (vinsn_issue.op inside {[VMSBF:VID]}) ? '1 : be(element_cnt, vinsn_issue.vtype.vsew),
+                be   : (vinsn_issue.op inside {[VMSBF:VID]}) ? result_queue_be[lane*ELENB +: ELENB] : be(element_cnt, vinsn_issue.vtype.vsew),
                 addr : (vinsn_issue.op inside {[VMSBF:VID]}) ? vaddr(vinsn_issue.vd, NrLanes) + ((vinsn_issue.vl - issue_cnt_q) >> (int'(EW64) - vinsn_issue.vtype.vsew)) : vaddr(vinsn_issue.vd, NrLanes) +
                   (((vinsn_issue.vl - issue_cnt_q) / NrLanes / DataWidth)),
                 id : vinsn_issue.id
