@@ -748,29 +748,49 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
             vcomp_vrgath_vs2_ready = '1; // By default, acknowledge masku_operand_vs2 (if it is valid)
 
             // Perform gather operation by checking if any element index given by v1 exists in current vs2 slice
-            for (int i = 0; i < total_input_elements; i++) begin
-              // Extract indeces from vs1 vector slice
-              automatic logic [ELEN-1:0] elem_idx = '0;
-              unique case (vinsn_issue.vtype.vsew)
-                EW8 : elem_idx[ 7:0] = masku_operand_vs1_seq[i* 8 +:  8];
-                EW16: elem_idx[15:0] = masku_operand_vs1_seq[i*16 +: 16];
-                EW32: elem_idx[31:0] = masku_operand_vs1_seq[i*32 +: 32];
-                EW64: elem_idx[63:0] = masku_operand_vs1_seq[i*64 +: 64];
-                default: ;
-              endcase
-
-              // Check if indices given by vs1 exist in vs
-              if (((vcomp_vrgath_processed_element_vs2_cnt_q + i) < vinsn_issue.vl) && (elem_idx >= vcomp_vrgath_processed_element_vs2_cnt_q) && (elem_idx < (vcomp_vrgath_processed_element_vs2_cnt_q + total_input_elements))) begin
-                unique case (vinsn_issue.vtype.vsew) // case statement gathers the elements from vs2 and puts them into vd
-                  EW8 : vcomp_vrgath_result_d[i* 8 +:  8] = masku_operand_vs2_seq[(elem_idx%total_input_elements)* 8 +:  8];
-                  EW16: vcomp_vrgath_result_d[i*16 +: 16] = masku_operand_vs2_seq[(elem_idx%total_input_elements)*16 +: 16];
-                  EW32: vcomp_vrgath_result_d[i*32 +: 32] = masku_operand_vs2_seq[(elem_idx%total_input_elements)*32 +: 32];
-                  EW64: vcomp_vrgath_result_d[i*64 +: 64] = masku_operand_vs2_seq[(elem_idx%total_input_elements)*64 +: 64];
-                  default: ;
-                endcase
-                // vcomp_vrgath_result_element_cnt_d += 1'b1;// $display("at vs[%0d] = %0d, at %0dns", i, elem_idx, $time); // MOIMFELD: NOTE - Not needed for naive implementation where the core will ask for full pass though vs2 for ever vs1 slice
+            unique case (vinsn_issue.vtype.vsew)
+              EW8 : begin
+                for (int i = 0; i < NrLanes * ELEN / 8; i++) begin
+                  automatic logic [7:0] elem_idx = masku_operand_vs1_seq[i*8 +:  8];
+                  if (((vcomp_vrgath_processed_element_vs2_cnt_q + i) < vinsn_issue.vl)
+                    && (elem_idx >= vcomp_vrgath_processed_element_vs2_cnt_q)
+                    && (elem_idx < (vcomp_vrgath_processed_element_vs2_cnt_q + total_input_elements))) begin
+                      vcomp_vrgath_result_d[i*8 +: 8] = masku_operand_vs2_seq[(elem_idx%total_input_elements)*8 +:  8];
+                  end
+                end
               end
-            end
+              EW16: begin
+                for (int i = 0; i < NrLanes * ELEN / 16; i++) begin
+                  automatic logic [15:0] elem_idx = masku_operand_vs1_seq[i*16 +: 16];
+                  if (((vcomp_vrgath_processed_element_vs2_cnt_q + i) < vinsn_issue.vl)
+                    && (elem_idx >= vcomp_vrgath_processed_element_vs2_cnt_q)
+                    && (elem_idx < (vcomp_vrgath_processed_element_vs2_cnt_q + total_input_elements))) begin
+                      vcomp_vrgath_result_d[i*16 +: 16] = masku_operand_vs2_seq[(elem_idx%total_input_elements)*16 +: 16];
+                  end
+                end
+              end
+              EW32: begin
+                for (int i = 0; i < NrLanes * ELEN / 32; i++) begin
+                  automatic logic [31:0] elem_idx = masku_operand_vs1_seq[i*32 +: 32];
+                  if (((vcomp_vrgath_processed_element_vs2_cnt_q + i) < vinsn_issue.vl)
+                    && (elem_idx >= vcomp_vrgath_processed_element_vs2_cnt_q)
+                    && (elem_idx < (vcomp_vrgath_processed_element_vs2_cnt_q + total_input_elements))) begin
+                      vcomp_vrgath_result_d[i*32 +: 32] = masku_operand_vs2_seq[(elem_idx%total_input_elements)*32 +: 32];
+                  end
+                end
+              end
+              EW64: begin
+                for (int i = 0; i < NrLanes * ELEN / 64; i++) begin
+                  automatic logic [63:0] elem_idx = masku_operand_vs1_seq[i*64 +: 64];
+                  if (((vcomp_vrgath_processed_element_vs2_cnt_q + i) < vinsn_issue.vl)
+                    && (elem_idx >= vcomp_vrgath_processed_element_vs2_cnt_q)
+                    && (elem_idx < (vcomp_vrgath_processed_element_vs2_cnt_q + total_input_elements))) begin
+                      vcomp_vrgath_result_d[i*64 +: 64] = masku_operand_vs2_seq[(elem_idx%total_input_elements)*64 +: 64];
+                  end
+                end
+              end
+              default: ; // Not sure what should be the default
+            endcase
 
             // Update processed elements of vs2 counter (vcomp_vrgath_processed_element_vs2_cnt_d)
             vcomp_vrgath_processed_element_vs2_cnt_d += total_input_elements;
