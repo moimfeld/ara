@@ -65,6 +65,10 @@ module masku_operands import ara_pkg::*; import rvv_pkg::*; #(
   // Deshuffle vs1 and vs2
   // ---------------------
   always_comb begin
+    masku_operand_m_seq_o   = '0;
+    masku_operand_vs1_seq_o = '0;
+    masku_operand_vs2_seq_o = '0;
+    masku_operand_alu_seq_o = '0;
       for (int b = 0; b < (NrLanes * ELEN_BYTES); b++) begin
         automatic int deshuffle_idx   = deshuffle_index(b, NrLanes, vinsn_issue_i.vtype.vsew);
         automatic int deshuffle_m_idx = deshuffle_index(b, NrLanes, vinsn_issue_i.eew_vmask);
