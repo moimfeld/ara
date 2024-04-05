@@ -1417,6 +1417,10 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
       commit_cnt_d = '0;
       issue_cnt_d  = '0;
       read_cnt_d   = '0;
+      if (!vinsn_issue.vm) begin
+        mask_pnt_d              = '0;
+        masku_operand_m_ready_o = '1;
+      end
     end
 
     ///////////////////////////
