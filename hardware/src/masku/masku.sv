@@ -744,7 +744,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
           vcomp_vrgath_vs2_ready    = '0;
 
           // Only start/continue computing vrgather computation if operands are valid
-          if ((&masku_operand_vs1_valid_i) && (&masku_operand_vs2_valid_i)) begin
+          if ((&masku_operand_vs1_valid_i || vinsn_issue.use_scalar_op) && (&masku_operand_vs2_valid_i)) begin
             
             // Update control signals
             vcomp_vrgath_vs2_ready = '1; // By default, acknowledge masku_operand_vs2 (if it is valid)
@@ -753,7 +753,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
             unique case (vinsn_issue.vtype.vsew)
               EW8 : begin
                 for (int i = 0; i < NrLanes * ELEN / 8; i++) begin
-                  automatic logic [7:0] elem_idx = masku_operand_vs1_seq[i*8 +:  8];
+                  automatic logic [7:0] elem_idx = vinsn_issue.use_scalar_op ? vinsn_issue.scalar_op[7:0] : masku_operand_vs1_seq[i*8 +: 8];
                   if (((vcomp_vrgath_processed_element_vs2_cnt_q + i) < vinsn_issue.vl)
                     && (elem_idx >= vcomp_vrgath_processed_element_vs2_cnt_q)
                     && (elem_idx < (vcomp_vrgath_processed_element_vs2_cnt_q + elements_per_datapath_width))) begin
@@ -763,7 +763,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
               end
               EW16: begin
                 for (int i = 0; i < NrLanes * ELEN / 16; i++) begin
-                  automatic logic [15:0] elem_idx = masku_operand_vs1_seq[i*16 +: 16];
+                  automatic logic [15:0] elem_idx = vinsn_issue.use_scalar_op ? vinsn_issue.scalar_op[15:0] : masku_operand_vs1_seq[i*16 +: 16];
                   if (((vcomp_vrgath_processed_element_vs2_cnt_q + i) < vinsn_issue.vl)
                     && (elem_idx >= vcomp_vrgath_processed_element_vs2_cnt_q)
                     && (elem_idx < (vcomp_vrgath_processed_element_vs2_cnt_q + elements_per_datapath_width))) begin
@@ -773,7 +773,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
               end
               EW32: begin
                 for (int i = 0; i < NrLanes * ELEN / 32; i++) begin
-                  automatic logic [31:0] elem_idx = masku_operand_vs1_seq[i*32 +: 32];
+                  automatic logic [31:0] elem_idx = vinsn_issue.use_scalar_op ? vinsn_issue.scalar_op[31:0] : masku_operand_vs1_seq[i*32 +: 32];
                   if (((vcomp_vrgath_processed_element_vs2_cnt_q + i) < vinsn_issue.vl)
                     && (elem_idx >= vcomp_vrgath_processed_element_vs2_cnt_q)
                     && (elem_idx < (vcomp_vrgath_processed_element_vs2_cnt_q + elements_per_datapath_width))) begin
@@ -783,7 +783,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
               end
               EW64: begin
                 for (int i = 0; i < NrLanes * ELEN / 64; i++) begin
-                  automatic logic [63:0] elem_idx = masku_operand_vs1_seq[i*64 +: 64];
+                  automatic logic [63:0] elem_idx = vinsn_issue.use_scalar_op ? vinsn_issue.scalar_op[63:0] : masku_operand_vs1_seq[i*64 +: 64];
                   if (((vcomp_vrgath_processed_element_vs2_cnt_q + i) < vinsn_issue.vl)
                     && (elem_idx >= vcomp_vrgath_processed_element_vs2_cnt_q)
                     && (elem_idx < (vcomp_vrgath_processed_element_vs2_cnt_q + elements_per_datapath_width))) begin
