@@ -668,7 +668,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
             if ((operand_request_i[AluA].vl << (int'(EW64) - int'(pe_req.eew_vs1))) * NrLanes !=
                 pe_req.vl) operand_request_i[AluA].vl += 1;
           end
-          operand_request_push[AluA] = pe_req.use_vs1 && !(pe_req.op inside {[VMFEQ:VMFGE], VCOMPRESS, VRGATHER, VCPOP});
+          operand_request_push[AluA] = pe_req.use_vs1 && !(pe_req.op inside {[VMFEQ:VMFGE], VCOMPRESS, VRGATHER, VCPOP, VMSIF, VMSOF, VMSBF});
 
           operand_request_i[AluB] = '{
             id      : pe_req.id,
@@ -695,7 +695,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
             if ((operand_request_i[AluB].vl << (int'(EW64) - int'(pe_req.eew_vs2))) * NrLanes !=
                 pe_req.vl) operand_request_i[AluB].vl += 1;
           end
-          operand_request_push[AluB] = pe_req.use_vs2 && !(pe_req.op inside {[VMFEQ:VMFGE], VCOMPRESS, VRGATHER, VCPOP});
+          operand_request_push[AluB] = pe_req.use_vs2 && !(pe_req.op inside {[VMFEQ:VMFGE], VCOMPRESS, VRGATHER, VCPOP, VMSIF, VMSOF, VMSBF, VFIRST});
 
           operand_request_i[MulFPUA] = '{
             id      : pe_req.id,
@@ -711,7 +711,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
           // This is an operation that runs normally on the ALU, and then gets *condensed* and
           // reshuffled at the Mask Unit.
           operand_request_i[MulFPUA].vl = vfu_operation_d.vl;
-          operand_request_push[MulFPUA] = pe_req.use_vs1 && pe_req.op inside {[VMFEQ:VMFGE]} && !(pe_req.op inside {VCOMPRESS, VRGATHER, VCPOP}); // MOIMFELD: Note - Maybe VCOMPRESS, VRGATHER, VCPOP not needed here
+          operand_request_push[MulFPUA] = pe_req.use_vs1 && pe_req.op inside {[VMFEQ:VMFGE]} && !(pe_req.op inside {VCOMPRESS, VRGATHER, VCPOP, VMSIF, VMSOF, VMSBF});
 
           operand_request_i[MulFPUB] = '{
             id      : pe_req.id,
@@ -726,7 +726,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
           // This is an operation that runs normally on the ALU, and then gets *condensed* and
           // reshuffled at the Mask Unit.
           operand_request_i[MulFPUB].vl = vfu_operation_d.vl;
-          operand_request_push[MulFPUB] = pe_req.use_vs2 && pe_req.op inside {[VMFEQ:VMFGE]} && !(pe_req.op inside {VCOMPRESS, VRGATHER, VCPOP}); // MOIMFELD: Note - Maybe VCOMPRESS, VRGATHER, VCPOP not needed here
+          operand_request_push[MulFPUB] = pe_req.use_vs2 && pe_req.op inside {[VMFEQ:VMFGE]} && !(pe_req.op inside {VCOMPRESS, VRGATHER, VCPOP, VMSIF, VMSOF, VMSBF, VFIRST});
 
 
           // Request for vs1 operand (going to mask unit)
@@ -764,7 +764,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
             scale_vl: pe_req.scale_vl,
             vtype   : pe_req.vtype,
             vstart  : vfu_operation_d.vstart,
-            hazard  : pe_req.hazard_vs2 | pe_req.hazard_vd,
+            hazard  : (pe_req.op inside {VMSBF, VMSOF, VMSIF}) ? pe_req.hazard_vs2 : pe_req.hazard_vs2 | pe_req.hazard_vd,
             default : '0
           };
           // Request equal amount of vector elements per lane!
@@ -775,18 +775,25 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
               operand_request_i[MaskB].vl += 1'b1;
             end
           end else if (pe_req.op inside {VRGATHER}) begin // set vl to VLMAX
+            // $display("VRGATHER vl assignment happened at %0tns", $time);
             if (pe_req.vtype.vlmul[2]) begin // this if statement checks if LMUL is a fraction (i.e. 1/2, 1/4 or 1/8)
               operand_request_i[MaskB].vl = ((MAXVL >> (11 - pe_req.vtype.vlmul[2:0])) >> pe_req.vtype.vsew) / NrLanes; // compute current_vlmax for LMUL = 1/2 or 1/4 or 1/8
             end else begin
               operand_request_i[MaskB].vl = ((MAXVL >> (3  - pe_req.vtype.vlmul[1:0])) >> pe_req.vtype.vsew) / NrLanes; // compute current_vlmax for LMUL = 1, 2, 4, 8
             end
+            // CODE BELOW ONLY USED TO GET RESULTS FOR OPTIMIZED VRGATHER INSTRUCTION
+            // if (pe_req.vtype.vlmul[2]) begin // this if statement checks if LMUL is a fraction (i.e. 1/2, 1/4 or 1/8)
+            //   operand_request_i[MaskB].vl = 128 / NrLanes;// ((MAXVL >> (11 - pe_req.vtype.vlmul[2:0])) >> pe_req.vtype.vsew) / NrLanes; // compute current_vlmax for LMUL = 1/2 or 1/4 or 1/8
+            // end else begin
+            //   operand_request_i[MaskB].vl = 128 / NrLanes;// ((MAXVL >> (3  - pe_req.vtype.vlmul[1:0])) >> pe_req.vtype.vsew) / NrLanes; // compute current_vlmax for LMUL = 1, 2, 4, 8
+            // end
           end else begin  // set vl to #mask_elements per lane
-            operand_request_i[MaskB].vl = pe_req.vl / (NrLanes * ELEN);
+            operand_request_i[MaskB].vl = pe_req.vl / (NrLanes * (8 << pe_req.vtype.vsew));
             if ((pe_req.vl % (NrLanes*ELEN)) != 0) begin
               operand_request_i[MaskB].vl += 1'b1;
             end
           end
-          operand_request_push[MaskB] = pe_req.use_vs2  && pe_req.op inside {VCOMPRESS, VRGATHER, VCPOP, VFIRST};
+          operand_request_push[MaskB] = pe_req.use_vs2  && pe_req.op inside {VCOMPRESS, VRGATHER, VCPOP, VFIRST, VMSIF, VMSOF, VMSBF};
 
           // Save operand request for further requests
           if (pe_req.op inside {VRGATHER}) begin
