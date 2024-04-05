@@ -5,7 +5,9 @@
 # Author: Matheus Cavalcante <matheusd@iis.ee.ethz.ch>
 #         Basile Bougenot <bbougenot@student.ethz.ch>
 
-rv64uv_sc_tests = vaadd \
+rv64uv_sc_tests = vrgather \
+                  vcompress \
+                  vaadd \
                   vaaddu\
                   vsadd \
                   vsaddu \
