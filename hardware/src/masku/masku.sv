@@ -173,8 +173,9 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
   logic [W_VFIRST-1:0]                  vfirst_slice;
 
 
-  // Local Parameter MAX_VCOMPRESS_DEPTH defines the maximum number of elements that are compressed per cycle.
+  // Local Parameters MAX_VCOMPRESS_DEPTH and MAX_VRGATHER_DEPTH define the maximum number of elements that are compressed/gathered per cycle.
   localparam MAX_VCOMPRESS_DEPTH = 2;
+  localparam MAX_VRGATHER_DEPTH = 2;
 
   // VCOMPRESS and VRGATHER signals
   logic [            NrLanes*ELEN-1:0] vcomp_vrgath_result_d, vcomp_vrgath_result_q, vcomp_vrgath_result_shuffled;
@@ -745,60 +746,68 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
 
           // Only start/continue computing vrgather computation if operands are valid
           if ((&masku_operand_vs1_valid_i || vinsn_issue.use_scalar_op) && (&masku_operand_vs2_valid_i)) begin
-            
-            // Update control signals
-            vcomp_vrgath_vs2_ready = '1; // By default, acknowledge masku_operand_vs2 (if it is valid)
 
             // Perform gather operation by checking if any element index given by v1 exists in current vs2 slice
             unique case (vinsn_issue.vtype.vsew)
               EW8 : begin
-                for (int i = 0; i < NrLanes * ELEN / 8; i++) begin
-                  automatic logic [7:0] elem_idx = vinsn_issue.use_scalar_op ? vinsn_issue.scalar_op[7:0] : masku_operand_vs1_seq[i*8 +: 8];
+                for (int i = 0; i < (NrLanes * ELEN / 8 < MAX_VRGATHER_DEPTH ? NrLanes * ELEN / 8 : MAX_VRGATHER_DEPTH); i++) begin
+                  automatic logic [7:0] elem_idx = vinsn_issue.use_scalar_op ? vinsn_issue.scalar_op[7:0] : masku_operand_vs1_seq[(vcomp_vrgath_processed_element_vs1_cnt_q+i)*8 +: 8];
                   if (((vcomp_vrgath_processed_element_vs2_cnt_q + i) < vinsn_issue.vl)
                     && (elem_idx >= vcomp_vrgath_processed_element_vs2_cnt_q)
                     && (elem_idx < (vcomp_vrgath_processed_element_vs2_cnt_q + elements_per_datapath_width))) begin
-                      vcomp_vrgath_result_d[i*8 +: 8] = masku_operand_vs2_seq[(elem_idx%elements_per_datapath_width)*8 +:  8];
+                      vcomp_vrgath_result_d[(vcomp_vrgath_processed_element_vs1_cnt_q+i)*8 +: 8] = masku_operand_vs2_seq[(elem_idx%elements_per_datapath_width)*8 +:  8];
                   end
                 end
+                vcomp_vrgath_processed_element_vs1_cnt_d += (NrLanes * ELEN / 8 < MAX_VRGATHER_DEPTH ? NrLanes * ELEN / 8 : MAX_VRGATHER_DEPTH);
               end
               EW16: begin
-                for (int i = 0; i < NrLanes * ELEN / 16; i++) begin
-                  automatic logic [15:0] elem_idx = vinsn_issue.use_scalar_op ? vinsn_issue.scalar_op[15:0] : masku_operand_vs1_seq[i*16 +: 16];
+                for (int i = 0; i < (NrLanes * ELEN / 16 < MAX_VRGATHER_DEPTH ? NrLanes * ELEN / 16 : MAX_VRGATHER_DEPTH); i++) begin
+                  automatic logic [15:0] elem_idx = vinsn_issue.use_scalar_op ? vinsn_issue.scalar_op[15:0] : masku_operand_vs1_seq[(vcomp_vrgath_processed_element_vs1_cnt_q+i)*16 +: 16];
                   if (((vcomp_vrgath_processed_element_vs2_cnt_q + i) < vinsn_issue.vl)
                     && (elem_idx >= vcomp_vrgath_processed_element_vs2_cnt_q)
                     && (elem_idx < (vcomp_vrgath_processed_element_vs2_cnt_q + elements_per_datapath_width))) begin
-                      vcomp_vrgath_result_d[i*16 +: 16] = masku_operand_vs2_seq[(elem_idx%elements_per_datapath_width)*16 +: 16];
+                      vcomp_vrgath_result_d[(vcomp_vrgath_processed_element_vs1_cnt_q+i)*16 +: 16] = masku_operand_vs2_seq[(elem_idx%elements_per_datapath_width)*16 +: 16];
                   end
                 end
+                vcomp_vrgath_processed_element_vs1_cnt_d += (NrLanes * ELEN / 16 < MAX_VRGATHER_DEPTH ? NrLanes * ELEN / 16 : MAX_VRGATHER_DEPTH);
               end
               EW32: begin
-                for (int i = 0; i < NrLanes * ELEN / 32; i++) begin
-                  automatic logic [31:0] elem_idx = vinsn_issue.use_scalar_op ? vinsn_issue.scalar_op[31:0] : masku_operand_vs1_seq[i*32 +: 32];
+                for (int i = 0; i < (NrLanes * ELEN / 32 < MAX_VRGATHER_DEPTH ? NrLanes * ELEN / 32 : MAX_VRGATHER_DEPTH); i++) begin
+                  automatic logic [31:0] elem_idx = vinsn_issue.use_scalar_op ? vinsn_issue.scalar_op[31:0] : masku_operand_vs1_seq[(vcomp_vrgath_processed_element_vs1_cnt_q+i)*32 +: 32];
                   if (((vcomp_vrgath_processed_element_vs2_cnt_q + i) < vinsn_issue.vl)
                     && (elem_idx >= vcomp_vrgath_processed_element_vs2_cnt_q)
                     && (elem_idx < (vcomp_vrgath_processed_element_vs2_cnt_q + elements_per_datapath_width))) begin
-                      vcomp_vrgath_result_d[i*32 +: 32] = masku_operand_vs2_seq[(elem_idx%elements_per_datapath_width)*32 +: 32];
+                      vcomp_vrgath_result_d[(vcomp_vrgath_processed_element_vs1_cnt_q+i)*32 +: 32] = masku_operand_vs2_seq[(elem_idx%elements_per_datapath_width)*32 +: 32];
                   end
                 end
+                vcomp_vrgath_processed_element_vs1_cnt_d += (NrLanes * ELEN / 32 < MAX_VRGATHER_DEPTH ? NrLanes * ELEN / 32 : MAX_VRGATHER_DEPTH);
               end
               EW64: begin
-                for (int i = 0; i < NrLanes * ELEN / 64; i++) begin
-                  automatic logic [63:0] elem_idx = vinsn_issue.use_scalar_op ? vinsn_issue.scalar_op[63:0] : masku_operand_vs1_seq[i*64 +: 64];
+                for (int i = 0; i < (NrLanes * ELEN / 64 < MAX_VRGATHER_DEPTH ? NrLanes * ELEN / 64 : MAX_VRGATHER_DEPTH); i++) begin
+                  automatic logic [63:0] elem_idx = vinsn_issue.use_scalar_op ? vinsn_issue.scalar_op[63:0] : masku_operand_vs1_seq[(vcomp_vrgath_processed_element_vs1_cnt_q+i)*64 +: 64];
                   if (((vcomp_vrgath_processed_element_vs2_cnt_q + i) < vinsn_issue.vl)
                     && (elem_idx >= vcomp_vrgath_processed_element_vs2_cnt_q)
                     && (elem_idx < (vcomp_vrgath_processed_element_vs2_cnt_q + elements_per_datapath_width))) begin
-                      vcomp_vrgath_result_d[i*64 +: 64] = masku_operand_vs2_seq[(elem_idx%elements_per_datapath_width)*64 +: 64];
+                      vcomp_vrgath_result_d[(vcomp_vrgath_processed_element_vs1_cnt_q+i)*64 +: 64] = masku_operand_vs2_seq[(elem_idx%elements_per_datapath_width)*64 +: 64];
                   end
                 end
+                vcomp_vrgath_processed_element_vs1_cnt_d += (NrLanes * ELEN / 64 < MAX_VRGATHER_DEPTH ? NrLanes * ELEN / 64 : MAX_VRGATHER_DEPTH);
               end
               default: ; // Not sure what should be the default
             endcase
 
             // Update processed elements of vs2 counter (vcomp_vrgath_processed_element_vs2_cnt_d)
-            vcomp_vrgath_processed_element_vs2_cnt_d += elements_per_datapath_width;
+            if (vcomp_vrgath_processed_element_vs1_cnt_d%elements_per_datapath_width == '0) begin
+              vcomp_vrgath_processed_element_vs2_cnt_d += elements_per_datapath_width;
+              vcomp_vrgath_vs2_ready = '1;
+            end
 
             // Check if whole vs2 has been processed (if so, we can be sure that the result vector is complete and ready to be written back to the vector register)
             vcomp_vrgath_result_full = vcomp_vrgath_processed_element_vs2_cnt_d >= current_vlmax;
+
+            if (!vcomp_vrgath_result_full && (vcomp_vrgath_processed_element_vs1_cnt_d%elements_per_datapath_width == '0)) begin
+              vcomp_vrgath_processed_element_vs1_cnt_d -= elements_per_datapath_width;
+            end
 
             // If vrgather result is valid, do:
             // - Compute byte enable signal (before updating vs1 pointer)
@@ -807,7 +816,6 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
             // - Reset processed elements of vs2 counter
             // - Ask for new operand (signal will be deasserted if instruction is finished, i.e. no more operands are needed)
             if (vcomp_vrgath_result_full) begin
-              vcomp_vrgath_processed_element_vs1_cnt_d += elements_per_datapath_width;
               vcomp_vrgath_result_element_cnt_d = vcomp_vrgath_processed_element_vs1_cnt_d; // vcomp_vrgath_result_element_cnt_d is needed for address computation during result writeback
               masku_operand_vs1_ready_o = '1;
               vcomp_vrgath_processed_element_vs2_cnt_d = '0;
