@@ -74,35 +74,44 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
 
   // ALU/FPU result (shuffled)
   elen_t [NrLanes-1:0] masku_operand_a;
-  logic  [NrLanes-1:0] masku_operand_a_valid_i;
-  logic  [NrLanes-1:0] masku_operand_a_ready_o;
+  logic  [NrLanes-1:0] masku_operand_a_valid;
+  logic  [NrLanes-1:0] masku_operand_a_ready;
 
   // ALU/FPU result (deshuffled)
   logic  [NrLanes*ELEN-1:0] masku_operand_a_seq;
 
   // vs1 (shuffeld)
   elen_t [NrLanes-1:0] masku_operand_vs1;
-  logic  [NrLanes-1:0] masku_operand_vs1_valid_i;
-  logic  [NrLanes-1:0] masku_operand_vs1_ready_o;
+  logic  [NrLanes-1:0] masku_operand_vs1_valid;
+  logic  [NrLanes-1:0] masku_operand_vs1_ready;
+  assign masku_operand_vs1_ready = '0; // tie to 0 as it is unused
 
   // vs1 (deshuffled)
   logic  [NrLanes*ELEN-1:0] masku_operand_vs1_seq;
+  logic  [     NrLanes-1:0] masku_operand_vs1_seq_valid;
+  logic  [     NrLanes-1:0] masku_operand_vs1_seq_ready;
 
   // vs2 (shuffled)
   elen_t [NrLanes-1:0] masku_operand_vs2;
-  logic  [NrLanes-1:0] masku_operand_vs2_valid_i;
-  logic  [NrLanes-1:0] masku_operand_vs2_ready_o;
+  logic  [NrLanes-1:0] masku_operand_vs2_valid;
+  logic  [NrLanes-1:0] masku_operand_vs2_ready;
+
+  assign masku_operand_vs2_ready = 1'b0;
 
   // vs2 (deshuffled)
   logic  [NrLanes*ELEN-1:0] masku_operand_vs2_seq;
+  logic  [     NrLanes-1:0] masku_operand_vs2_seq_valid;
+  logic  [     NrLanes-1:0] masku_operand_vs2_seq_ready;
   
   // Mask
   elen_t [NrLanes-1:0] masku_operand_m;
-  logic  [NrLanes-1:0] masku_operand_m_valid_i;
-  logic  [NrLanes-1:0] masku_operand_m_ready_o;
+  logic  [NrLanes-1:0] masku_operand_m_valid;
+  logic  [NrLanes-1:0] masku_operand_m_ready;
 
   // Mask deshuffled
   logic  [NrLanes*ELEN-1:0] masku_operand_m_seq;
+  logic  [NrLanes-1:0] masku_operand_m_seq_valid;
+  logic  [NrLanes-1:0] masku_operand_m_seq_ready;
 
   // Insn-queue related signal
   pe_req_t vinsn_issue;
@@ -111,28 +120,49 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
   logic  [NrLanes*ELEN-1:0] bit_enable_shuffle;
   logic  [NrLanes*ELEN-1:0] alu_result_compressed;
 
-  // Performs all shuffling and deshuffling of mask operands (including masks for mask instructions) - purely combinational module
+  // Performs all shuffling and deshuffling of mask operands (including masks for mask instructions)
+  // Furthermore, it buffers certain operands that would create long critical paths
   masku_operands #(
     .NrLanes ( NrLanes )
   ) i_masku_operands (
+    .clk_i                         (                       clk_i ),
+    .rst_ni                        (                      rst_ni ),
     // Control logic
-    .masku_fu_i              (      masku_operand_fu ),
-    .vinsn_issue_i           (           vinsn_issue ),
-    .vrf_pnt_i               (             vrf_pnt_q ),
+    .masku_fu_i                    (            masku_operand_fu ),
+    .vinsn_issue_i                 (                 vinsn_issue ),
+    .vrf_pnt_i                     (                   vrf_pnt_q ),
     // Operands coming from lanes
-    .masku_operands_i        (       masku_operand_i ),
+    .masku_operand_valid_i         (       masku_operand_valid_i ),
+    .masku_operand_ready_o         (       masku_operand_ready_o ),
+    .masku_operands_i              (             masku_operand_i ),
     // Operands prepared for mask unit execution
-    .masku_operand_alu_o     (       masku_operand_a ),
-    .masku_operand_alu_seq_o (   masku_operand_a_seq ),
-    .masku_operand_vs1_o     (     masku_operand_vs1 ),
-    .masku_operand_vs1_seq_o ( masku_operand_vs1_seq ),
-    .masku_operand_vs2_o     (     masku_operand_vs2 ),
-    .masku_operand_vs2_seq_o ( masku_operand_vs2_seq ),
-    .masku_operand_m_o       (       masku_operand_m ),
-    .masku_operand_m_seq_o   (   masku_operand_m_seq ),
-    .bit_enable_mask_o       (       bit_enable_mask ),
-    .shuffled_vl_bit_mask_o  (    bit_enable_shuffle ),
-    .alu_result_compressed_o ( alu_result_compressed )
+    .masku_operand_alu_o           (             masku_operand_a ),
+    .masku_operand_alu_valid_o     (       masku_operand_a_valid ),
+    .masku_operand_alu_ready_i     (       masku_operand_a_ready ),
+    .masku_operand_alu_seq_o       (         masku_operand_a_seq ),
+    .masku_operand_alu_seq_valid_o (  ),
+    .masku_operand_alu_seq_ready_i (  ),
+    .masku_operand_vs1_o           (           masku_operand_vs1 ),
+    .masku_operand_vs1_valid_o     (     masku_operand_vs1_valid ),
+    .masku_operand_vs1_ready_i     (     masku_operand_vs1_ready ),
+    .masku_operand_vs1_seq_o       (       masku_operand_vs1_seq ),
+    .masku_operand_vs1_seq_valid_o ( masku_operand_vs1_seq_valid ),
+    .masku_operand_vs1_seq_ready_i ( masku_operand_vs1_seq_ready ),
+    .masku_operand_vs2_o           (           masku_operand_vs2 ),
+    .masku_operand_vs2_valid_o     (     masku_operand_vs2_valid ),
+    .masku_operand_vs2_ready_i     (     masku_operand_vs2_ready ),
+    .masku_operand_vs2_seq_o       (       masku_operand_vs2_seq ),
+    .masku_operand_vs2_seq_valid_o ( masku_operand_vs2_seq_valid ),
+    .masku_operand_vs2_seq_ready_i ( masku_operand_vs2_seq_ready ),
+    .masku_operand_m_o             (             masku_operand_m ),
+    .masku_operand_m_valid_o       (       masku_operand_m_valid ),
+    .masku_operand_m_ready_i       (       masku_operand_m_ready ),
+    .masku_operand_m_seq_o         (         masku_operand_m_seq ),
+    .masku_operand_m_seq_valid_o   (  ),
+    .masku_operand_m_seq_ready_i   (  ),
+    .bit_enable_mask_o             (             bit_enable_mask ),
+    .shuffled_vl_bit_mask_o        (          bit_enable_shuffle ),
+    .alu_result_compressed_o       (       alu_result_compressed )
   );
 
 
@@ -187,8 +217,8 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
   logic [          idx_width(MAXVL):0] vcomp_vrgath_processed_element_vs2_cnt_d, vcomp_vrgath_processed_element_vs2_cnt_q; // counts number of elements processed by vcompress/vrgather instructions
   logic                                vcomp_vrgath_result_full;  // result buffer is ful
   logic                                vcomp_vrgath_result_valid; // result buffer can be written back to vreg
-  logic  [NrLanes-1:0]                 vcomp_vrgath_vs2_ready;
-  logic                                vcompress_stall_vs2_ready; // stall fetching mechanism for vs2
+  logic  [NrLanes-1:0]                 vcomp_vrgath_vs2_seq_ready;
+  logic                                vcompress_stall_vs2_seq_ready; // stall fetching mechanism for vs2
   logic                                vcompress_finished, vrgather_finished; // vcompress or vrgather instruction finished
   logic [           NrLanes*ELENB-1:0] vrgath_be; // byte enable for vrgather
 
@@ -203,24 +233,24 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
   logic  [          NrLanes-1:0] vmsif_vmsof_vmsbf_vs2_ready;
 
   // Control flow for mask operands
-  assign masku_operand_vs2_ready_o = vcomp_vrgath_vs2_ready | vcpop_vfirst_vs2_ready | vmsif_vmsof_vmsbf_vs2_ready;
-  for (genvar lane = 0; lane < NrLanes; lane++) begin: gen_unpack_masku_operands
+  assign masku_operand_vs2_seq_ready = vcomp_vrgath_vs2_seq_ready | vcpop_vfirst_vs2_ready | vmsif_vmsof_vmsbf_vs2_ready;
+  // for (genvar lane = 0; lane < NrLanes; lane++) begin: gen_unpack_masku_operands
     // immediately acknowledge operands coming from functional units
-    assign masku_operand_a_valid_i[lane] = masku_operand_valid_i[lane][3 + masku_operand_fu];
-    for (genvar operand_fu = 0; operand_fu < NrMaskFUnits; operand_fu++) begin: gen_masku_operand_ready
-      assign masku_operand_ready_o[lane][3 + operand_fu] = (masku_fu_e'(operand_fu) == masku_operand_fu) && masku_operand_a_ready_o[lane];
-    end: gen_masku_operand_ready
+    // assign masku_operand_a_valid[lane] = masku_operand_valid_i[lane][3 + masku_operand_fu];
+    // for (genvar operand_fu = 0; operand_fu < NrMaskFUnits; operand_fu++) begin: gen_masku_operand_ready
+    //   assign masku_operand_ready_o[lane][3 + operand_fu] = (masku_fu_e'(operand_fu) == masku_operand_fu) && masku_operand_a_ready[lane];
+    // end: gen_masku_operand_ready
 
     // acknowledge vs2 if there is no stall.
-    assign masku_operand_vs2_valid_i[lane] = masku_operand_valid_i[lane][2];
-    assign masku_operand_ready_o[lane][2]  = masku_operand_vs2_ready_o[lane];
+    // assign masku_operand_vs2_valid[lane] = masku_operand_valid_i[lane][2];
+    // assign masku_operand_ready_o[lane][2]  = masku_operand_vs2_seq_ready[lane];
 
-    assign masku_operand_vs1_valid_i[lane] = (vinsn_issue.op inside {VIOTA,VID}) ? '1 : masku_operand_valid_i[lane][1];
-    assign masku_operand_ready_o[lane][1]  = masku_operand_vs1_ready_o[lane];
+    // assign masku_operand_vs1_valid[lane] = (vinsn_issue.op inside {VIOTA,VID}) ? '1 : masku_operand_valid_i[lane][1];
+    // assign masku_operand_ready_o[lane][1]  = masku_operand_vs1_seq_ready[lane];
 
-    assign masku_operand_m_valid_i[lane]   = masku_operand_valid_i[lane][0];
-    assign masku_operand_ready_o[lane][0]  = masku_operand_m_ready_o[lane];
-  end: gen_unpack_masku_operands
+    // assign masku_operand_m_valid[lane]   = masku_operand_valid_i[lane][0];
+    // assign masku_operand_ready_o[lane][0]  = masku_operand_m_ready[lane];
+  // end: gen_unpack_masku_operands
 
 
   ////////////////////////////////
@@ -381,7 +411,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
 
   // iteration count for masked instrctions
   always_comb begin
-    if (vinsn_issue_valid && (&masku_operand_a_valid_i || &masku_operand_vs2_valid_i)) begin
+    if (vinsn_issue_valid && (&masku_operand_a_valid || &masku_operand_vs2_valid)) begin
       iteration_count_d = iteration_count_q + 1'b1;
     end else begin
       iteration_count_d = iteration_count_q;
@@ -462,11 +492,11 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
     vcomp_vrgath_result_shuffled             = '0;
     vcomp_vrgath_result_full                 = '0;
     vcomp_vrgath_result_valid                = '0;
-    vcompress_stall_vs2_ready                = '0;
+    vcompress_stall_vs2_seq_ready            = '0;
     vrgath_be                                = '0;
     masku_operand_req_o                      = '0;
-    masku_operand_vs1_ready_o                = '0;
-    vcomp_vrgath_vs2_ready                   = '0;
+    masku_operand_vs1_seq_ready                  = '0;
+    vcomp_vrgath_vs2_seq_ready                   = '0;
 
     // Compute vlmax based on current vtype
     if (vinsn_issue.vtype.vlmul[2]) begin // this if statement checks if LMUL is a fraction (i.e. 1/2, 1/4 or 1/8)
@@ -483,7 +513,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
       // Mask generation
       unique case (vinsn_issue.op) inside
         [VMSBF:VID] :
-          if (&masku_operand_a_valid_i) begin
+          if (&masku_operand_a_valid) begin
             unique case (vinsn_issue.vtype.vsew)
               EW8 : for (int i = 0; i < (DataWidth * NrLanes)/8; i++)
                       mask [(i*8) +: 8]   = {8{bit_enable_mask [i+(((DataWidth * NrLanes)/8)*(iteration_count_d-1))]}};
@@ -505,7 +535,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
         [VMANDNOT:VMXNOR]: alu_result = (masku_operand_a) | (~bit_enable_shuffle);
         [VMFEQ:VMSGTU], [VMSGT:VMSBC]:  alu_result = (alu_result_compressed & bit_enable_mask) | (~bit_enable_shuffle);
         [VMSBF:VMSIF] : begin
-            if (&masku_operand_vs2_valid_i && (&masku_operand_m_valid_i || vinsn_issue.vm)) begin
+            if (&masku_operand_vs2_valid && (&masku_operand_m_valid || vinsn_issue.vm)) begin
               for (int i = 0; i < NrLanes * DataWidth; i++) begin
                 if (masku_operand_vs2_seq[i] == 1'b0) begin
                   alu_result_vm[i] = (vinsn_issue.op == VMSOF) ? 1'b0 : not_found_one_d;
@@ -521,7 +551,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
             end
         end
         VIOTA: begin
-          if (&masku_operand_a_valid_i) begin
+          if (&masku_operand_a_valid) begin
             alu_operand_b_seq_m = alu_operand_b_seq & bit_enable_mask;
             unique case (vinsn_issue.vtype.vsew)
               EW8 : begin
@@ -572,7 +602,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
           end
         end
         VID: begin
-          if (&masku_operand_a_valid_i) begin
+          if (&masku_operand_a_valid) begin
             unique case (vinsn_issue.vtype.vsew)
               EW8 : begin
                 for (int index = 1; index < (NrLanes*DataWidth)/8; index++) begin
@@ -614,9 +644,9 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
 
           // initialize control signals
           vcomp_vrgath_result_full  = 1'b0;
-          vcompress_stall_vs2_ready = 1'b0;
-          masku_operand_vs1_ready_o = '0;
-          vcomp_vrgath_vs2_ready    = '0;
+          vcompress_stall_vs2_seq_ready = 1'b0;
+          masku_operand_vs1_seq_ready = '0;
+          vcomp_vrgath_vs2_seq_ready    = '0;
 
           // Assign vcomp_vrgath_result_vec_elements (# valid result elements in result vector)
           vcomp_vrgath_result_vec_elements = vcomp_vrgath_result_element_cnt_d % elements_per_datapath_width;
@@ -626,10 +656,10 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
             vcomp_vrgath_result_d = '0;
           end
 
-          vcomp_vrgath_vs2_ready = '1; // by default, receive new operand
+          vcomp_vrgath_vs2_seq_ready = '1; // by default, receive new operand
 
           // Only start/continue computing vcompress result if both operands are ready
-          if ((&masku_operand_vs1_valid_i) && (&masku_operand_vs2_valid_i)) begin
+          if ((&masku_operand_vs1_seq_valid) && (&masku_operand_vs2_seq_valid)) begin
             unique case (vinsn_issue.vtype.vsew)
               EW8 : begin
                 // For loop compresses min(MAX_VCOMPRESS_DEPTH, NrLanes * ELEN / 8) elements (NrLanes * ELEN / 8 is number of elements per datapath width (EW=8bit))
@@ -641,7 +671,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
                       vcomp_vrgath_result_element_cnt_d += 1'b1; // Note: Assignment depends on previous iteration of the for-loop --> this loop generates long combinational paths (might be suboptimal for timing)
                       vcomp_vrgath_result_vec_elements  += 1'b1; // update vcomp_vrgath_result_vec_elements
                     end else begin
-                      vcompress_stall_vs2_ready = 1'b1; // if there is another active element after the vcomp_vrgath_result_d is full, we must keep vs2 for another cycle, such that these active elements are not lost
+                      vcompress_stall_vs2_seq_ready = 1'b1; // if there is another active element after the vcomp_vrgath_result_d is full, we must keep vs2 for another cycle, such that these active elements are not lost
                     end
 
                     // Check if vcomp_vrgath_result_d is full --> if full, result should be written back to registerfile
@@ -660,7 +690,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
                       vcomp_vrgath_result_element_cnt_d += 1'b1; // Note: Assignment depends on previous iteration of the for-loop --> this loop generates long combinational paths (might be suboptimal for timing)
                       vcomp_vrgath_result_vec_elements  += 1'b1; // update vcomp_vrgath_result_vec_elements
                     end else begin
-                      vcompress_stall_vs2_ready = 1'b1; // if there is another active element after the vcomp_vrgath_result_d is full, we must keep vs2 for another cycle, such that these active elements are not lost
+                      vcompress_stall_vs2_seq_ready = 1'b1; // if there is another active element after the vcomp_vrgath_result_d is full, we must keep vs2 for another cycle, such that these active elements are not lost
                     end
 
                     // Check if vcomp_vrgath_result_d is full --> if full, result should be written back to registerfile
@@ -679,7 +709,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
                       vcomp_vrgath_result_element_cnt_d += 1'b1; // Note: Assignment depends on previous iteration of the for-loop --> this loop generates long combinational paths (might be suboptimal for timing)
                       vcomp_vrgath_result_vec_elements  += 1'b1; // update vcomp_vrgath_result_vec_elements
                     end else begin
-                      vcompress_stall_vs2_ready = 1'b1; // if there is another active element after the vcomp_vrgath_result_d is full, we must keep vs2 for another cycle, such that these active elements are not lost
+                      vcompress_stall_vs2_seq_ready = 1'b1; // if there is another active element after the vcomp_vrgath_result_d is full, we must keep vs2 for another cycle, such that these active elements are not lost
                     end
 
                     // Check if vcomp_vrgath_result_d is full --> if full, result should be written back to registerfile
@@ -698,7 +728,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
                       vcomp_vrgath_result_element_cnt_d += 1'b1; // Note: Assignment depends on previous iteration of the for-loop --> this loop generates long combinational paths (might be suboptimal for timing)
                       vcomp_vrgath_result_vec_elements  += 1'b1; // update vcomp_vrgath_result_vec_elements
                     end else begin
-                      vcompress_stall_vs2_ready = 1'b1; // if there is another active element after the vcomp_vrgath_result_d is full, we must keep vs2 for another cycle, such that these active elements are not lost
+                      vcompress_stall_vs2_seq_ready = 1'b1; // if there is another active element after the vcomp_vrgath_result_d is full, we must keep vs2 for another cycle, such that these active elements are not lost
                     end
 
                     // Check if vcomp_vrgath_result_d is full --> if full, result should be written back to registerfile
@@ -712,23 +742,23 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
 
             // Stall vs2 operand acknowledgement if not the whole vs2 operand has been processed yet
             if ((vcomp_vrgath_processed_element_vs2_cnt_d % elements_per_datapath_width) != 0) begin
-              vcompress_stall_vs2_ready = 1'b1;
+              vcompress_stall_vs2_seq_ready = 1'b1;
             end
 
-            // Do not assign vcomp_vrgath_vs2_ready if vcompress_stall_vs2_ready is high
-            if (vcompress_stall_vs2_ready) begin
-              vcomp_vrgath_vs2_ready = '0;
+            // Do not assign vcomp_vrgath_vs2_seq_ready if vcompress_stall_vs2_seq_ready is high
+            if (vcompress_stall_vs2_seq_ready) begin
+              vcomp_vrgath_vs2_seq_ready = '0;
             end
 
             // For vcompress, the vs2 counter also reflects how many elements were processed of vs1 (unlike for vrgather where an extra counter is needed)
             if ((vcomp_vrgath_processed_element_vs2_cnt_d % (NrLanes * ELEN)) == '0) begin
-              masku_operand_vs1_ready_o = '1;
+              masku_operand_vs1_seq_ready = '1;
             end
 
             // Check if vcompressed instrcution is finished
             if (vcomp_vrgath_processed_element_vs2_cnt_d >= vinsn_issue.vl) begin
-              masku_operand_vs1_ready_o = '1; // acknowledge last operand
-              vcomp_vrgath_vs2_ready = '1; // acknowledge last operand
+              masku_operand_vs1_seq_ready = '1; // acknowledge last operand
+              vcomp_vrgath_vs2_seq_ready = '1; // acknowledge last operand
             end
           end
         end
@@ -741,54 +771,62 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
 
           // initialize control signals
           vcomp_vrgath_result_full  = 1'b0;
-          masku_operand_vs1_ready_o = '0;
-          vcomp_vrgath_vs2_ready    = '0;
+          masku_operand_vs1_seq_ready = '0;
+          vcomp_vrgath_vs2_seq_ready    = '0;
 
           // Only start/continue computing vrgather computation if operands are valid
-          if ((&masku_operand_vs1_valid_i || vinsn_issue.use_scalar_op) && (&masku_operand_vs2_valid_i)) begin
+          if ((&masku_operand_vs1_seq_valid || vinsn_issue.use_scalar_op) && (&masku_operand_vs2_seq_valid)) begin
 
             // Perform gather operation by checking if any element index given by v1 exists in current vs2 slice
             unique case (vinsn_issue.vtype.vsew)
               EW8 : begin
                 for (int i = 0; i < (NrLanes * ELEN / 8 < MAX_VRGATHER_DEPTH ? NrLanes * ELEN / 8 : MAX_VRGATHER_DEPTH); i++) begin
-                  automatic logic [7:0] elem_idx = vinsn_issue.use_scalar_op ? vinsn_issue.scalar_op[7:0] : masku_operand_vs1_seq[(vcomp_vrgath_processed_element_vs1_cnt_q+i)*8 +: 8];
+                  automatic logic [idx_width(NrLanes*ELENB)-1:0] result_idx = (vcomp_vrgath_processed_element_vs1_cnt_q+i) % (NrLanes * ELENB);
+                  automatic logic [idx_width(NrLanes*ELENB)-1:0] vs1_idx = result_idx;
+                  automatic logic [7:0] elem_idx = vinsn_issue.use_scalar_op ? vinsn_issue.scalar_op[7:0] : masku_operand_vs1_seq[vs1_idx*8 +: 8];
                   if (((vcomp_vrgath_processed_element_vs2_cnt_q + i) < vinsn_issue.vl)
                     && (elem_idx >= vcomp_vrgath_processed_element_vs2_cnt_q)
-                    && (elem_idx < (vcomp_vrgath_processed_element_vs2_cnt_q + elements_per_datapath_width))) begin
-                      vcomp_vrgath_result_d[(vcomp_vrgath_processed_element_vs1_cnt_q+i)*8 +: 8] = masku_operand_vs2_seq[(elem_idx%elements_per_datapath_width)*8 +:  8];
+                    && (elem_idx < (vcomp_vrgath_processed_element_vs2_cnt_q + (NrLanes * ELENB)))) begin
+                      vcomp_vrgath_result_d[result_idx*8 +: 8] = masku_operand_vs2_seq[(elem_idx % (NrLanes * ELENB))*8 +:  8];
                   end
                 end
                 vcomp_vrgath_processed_element_vs1_cnt_d += (NrLanes * ELEN / 8 < MAX_VRGATHER_DEPTH ? NrLanes * ELEN / 8 : MAX_VRGATHER_DEPTH);
               end
               EW16: begin
                 for (int i = 0; i < (NrLanes * ELEN / 16 < MAX_VRGATHER_DEPTH ? NrLanes * ELEN / 16 : MAX_VRGATHER_DEPTH); i++) begin
-                  automatic logic [15:0] elem_idx = vinsn_issue.use_scalar_op ? vinsn_issue.scalar_op[15:0] : masku_operand_vs1_seq[(vcomp_vrgath_processed_element_vs1_cnt_q+i)*16 +: 16];
+                  automatic logic [idx_width(NrLanes*ELENB/2)-1:0] result_idx = (vcomp_vrgath_processed_element_vs1_cnt_q+i) % (NrLanes * ELENB/2);
+                  automatic logic [idx_width(NrLanes*ELENB/2)-1:0] vs1_idx = result_idx;
+                  automatic logic [15:0] elem_idx = vinsn_issue.use_scalar_op ? vinsn_issue.scalar_op[15:0] : masku_operand_vs1_seq[vs1_idx*16 +: 16];
                   if (((vcomp_vrgath_processed_element_vs2_cnt_q + i) < vinsn_issue.vl)
                     && (elem_idx >= vcomp_vrgath_processed_element_vs2_cnt_q)
-                    && (elem_idx < (vcomp_vrgath_processed_element_vs2_cnt_q + elements_per_datapath_width))) begin
-                      vcomp_vrgath_result_d[(vcomp_vrgath_processed_element_vs1_cnt_q+i)*16 +: 16] = masku_operand_vs2_seq[(elem_idx%elements_per_datapath_width)*16 +: 16];
+                    && (elem_idx < (vcomp_vrgath_processed_element_vs2_cnt_q + (NrLanes * ELENB/2)))) begin
+                      vcomp_vrgath_result_d[result_idx*16 +: 16] = masku_operand_vs2_seq[(elem_idx%(NrLanes * ELENB/2))*16 +: 16];
                   end
                 end
                 vcomp_vrgath_processed_element_vs1_cnt_d += (NrLanes * ELEN / 16 < MAX_VRGATHER_DEPTH ? NrLanes * ELEN / 16 : MAX_VRGATHER_DEPTH);
               end
               EW32: begin
                 for (int i = 0; i < (NrLanes * ELEN / 32 < MAX_VRGATHER_DEPTH ? NrLanes * ELEN / 32 : MAX_VRGATHER_DEPTH); i++) begin
-                  automatic logic [31:0] elem_idx = vinsn_issue.use_scalar_op ? vinsn_issue.scalar_op[31:0] : masku_operand_vs1_seq[(vcomp_vrgath_processed_element_vs1_cnt_q+i)*32 +: 32];
+                  automatic logic [idx_width(NrLanes*ELENB/4)-1:0] result_idx = (vcomp_vrgath_processed_element_vs1_cnt_q+i) % (NrLanes * ELENB/4);
+                  automatic logic [idx_width(NrLanes*ELENB/4)-1:0] vs1_idx = result_idx;
+                  automatic logic [31:0] elem_idx = vinsn_issue.use_scalar_op ? vinsn_issue.scalar_op[31:0] : masku_operand_vs1_seq[vs1_idx*32 +: 32];
                   if (((vcomp_vrgath_processed_element_vs2_cnt_q + i) < vinsn_issue.vl)
                     && (elem_idx >= vcomp_vrgath_processed_element_vs2_cnt_q)
-                    && (elem_idx < (vcomp_vrgath_processed_element_vs2_cnt_q + elements_per_datapath_width))) begin
-                      vcomp_vrgath_result_d[(vcomp_vrgath_processed_element_vs1_cnt_q+i)*32 +: 32] = masku_operand_vs2_seq[(elem_idx%elements_per_datapath_width)*32 +: 32];
+                    && (elem_idx < (vcomp_vrgath_processed_element_vs2_cnt_q + (NrLanes * ELENB/4)))) begin
+                      vcomp_vrgath_result_d[result_idx*32 +: 32] = masku_operand_vs2_seq[(elem_idx%(NrLanes * ELENB/4))*32 +: 32];
                   end
                 end
                 vcomp_vrgath_processed_element_vs1_cnt_d += (NrLanes * ELEN / 32 < MAX_VRGATHER_DEPTH ? NrLanes * ELEN / 32 : MAX_VRGATHER_DEPTH);
               end
               EW64: begin
                 for (int i = 0; i < (NrLanes * ELEN / 64 < MAX_VRGATHER_DEPTH ? NrLanes * ELEN / 64 : MAX_VRGATHER_DEPTH); i++) begin
-                  automatic logic [63:0] elem_idx = vinsn_issue.use_scalar_op ? vinsn_issue.scalar_op[63:0] : masku_operand_vs1_seq[(vcomp_vrgath_processed_element_vs1_cnt_q+i)*64 +: 64];
+                  automatic logic [idx_width(NrLanes*ELENB/8)-1:0] result_idx = (vcomp_vrgath_processed_element_vs1_cnt_q+i) % (NrLanes * ELENB/8);
+                  automatic logic [idx_width(NrLanes*ELENB/8)-1:0] vs1_idx = result_idx;
+                  automatic logic [63:0] elem_idx = vinsn_issue.use_scalar_op ? vinsn_issue.scalar_op[63:0] : masku_operand_vs1_seq[vs1_idx*64 +: 64];
                   if (((vcomp_vrgath_processed_element_vs2_cnt_q + i) < vinsn_issue.vl)
                     && (elem_idx >= vcomp_vrgath_processed_element_vs2_cnt_q)
-                    && (elem_idx < (vcomp_vrgath_processed_element_vs2_cnt_q + elements_per_datapath_width))) begin
-                      vcomp_vrgath_result_d[(vcomp_vrgath_processed_element_vs1_cnt_q+i)*64 +: 64] = masku_operand_vs2_seq[(elem_idx%elements_per_datapath_width)*64 +: 64];
+                    && (elem_idx < (vcomp_vrgath_processed_element_vs2_cnt_q + (NrLanes * ELENB/8)))) begin
+                      vcomp_vrgath_result_d[result_idx*64 +: 64] = masku_operand_vs2_seq[(elem_idx%(NrLanes * ELENB/8))*64 +: 64];
                   end
                 end
                 vcomp_vrgath_processed_element_vs1_cnt_d += (NrLanes * ELEN / 64 < MAX_VRGATHER_DEPTH ? NrLanes * ELEN / 64 : MAX_VRGATHER_DEPTH);
@@ -799,7 +837,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
             // Update processed elements of vs2 counter (vcomp_vrgath_processed_element_vs2_cnt_d)
             if (vcomp_vrgath_processed_element_vs1_cnt_d%elements_per_datapath_width == '0) begin
               vcomp_vrgath_processed_element_vs2_cnt_d += elements_per_datapath_width;
-              vcomp_vrgath_vs2_ready = '1;
+              vcomp_vrgath_vs2_seq_ready = '1;
             end
 
             // Check if whole vs2 has been processed (if so, we can be sure that the result vector is complete and ready to be written back to the vector register)
@@ -817,7 +855,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
             // - Ask for new operand (signal will be deasserted if instruction is finished, i.e. no more operands are needed)
             if (vcomp_vrgath_result_full) begin
               vcomp_vrgath_result_element_cnt_d = vcomp_vrgath_processed_element_vs1_cnt_d; // vcomp_vrgath_result_element_cnt_d is needed for address computation during result writeback
-              masku_operand_vs1_ready_o = '1;
+              masku_operand_vs1_seq_ready = '1;
               vcomp_vrgath_processed_element_vs2_cnt_d = '0;
               masku_operand_req_o = '1;
             end
@@ -945,8 +983,8 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
 
     // We are not ready, by default
     pe_resp                 = '0;
-    masku_operand_a_ready_o = '0;
-    masku_operand_m_ready_o = '0;
+    masku_operand_a_ready = '0;
+    masku_operand_m_ready = '0;
 
     // Inform the main sequencer if we are idle
     pe_req_ready_o = !vinsn_queue_full;
@@ -973,7 +1011,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
     if (vinsn_issue_valid && !(vd_scalar(vinsn_issue.op))) begin
       // Is there place in the mask queue to write the mask operands?
       // Did we receive the mask bits on the MaskM channel?
-      if (!vinsn_issue.vm && !mask_queue_full && &masku_operand_m_valid_i && !(vinsn_issue.op inside {VRGATHER, VMSBF, VMSOF, VMSIF})) begin
+      if (!vinsn_issue.vm && !mask_queue_full && &masku_operand_m_valid && !(vinsn_issue.op inside {VRGATHER, VMSBF, VMSOF, VMSIF})) begin
         // Copy data from the mask operands into the mask queue
         for (int vrf_seq_byte = 0; vrf_seq_byte < NrLanes*StrbWidth; vrf_seq_byte++) begin
           // Map vrf_seq_byte to the corresponding byte in the VRF word.
@@ -1034,7 +1072,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
         // Consumed all valid bytes from the lane operands
         if (mask_pnt_d == NrLanes*64 || read_cnt_d == '0) begin
           // Request another beat
-          masku_operand_m_ready_o = '1;
+          masku_operand_m_ready = '1;
           // Reset the pointer
           mask_pnt_d              = '0;
         end
@@ -1049,7 +1087,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
 
     // Is there an instruction ready to be issued?
     if (vinsn_issue_valid && vd_scalar(vinsn_issue.op)) begin
-      if (&(masku_operand_vs2_valid_i | fake_a_valid) && (&masku_operand_m_valid_i || vinsn_issue.vm)) begin
+      if (&(masku_operand_vs2_valid | fake_a_valid) && (&masku_operand_m_valid || vinsn_issue.vm)) begin
 
         // increment slice counter
         vcpop_slice_cnt_d = vcpop_slice_cnt_q + 1'b1;
@@ -1059,9 +1097,9 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
         if (((vcpop_slice_cnt_q == N_SLICES_CPOP - 1) && vinsn_issue.op == VCPOP) ||
             ((vcpop_slice_cnt_q == N_SLICES_VFIRST-1) && vinsn_issue.op == VFIRST)) begin
           vcpop_slice_cnt_d       = '0;
-          vcpop_vfirst_vs2_ready = masku_operand_vs2_valid_i;
+          vcpop_vfirst_vs2_ready = masku_operand_vs2_valid;
           if (!vinsn_issue.vm) begin 
-            masku_operand_m_ready_o = '1;
+            masku_operand_m_ready = '1;
           end
         end
 
@@ -1073,9 +1111,9 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
           issue_cnt_d = '0;
           commit_cnt_d = '0;
           read_cnt_d ='0;
-          vcpop_vfirst_vs2_ready = masku_operand_vs2_valid_i;
+          vcpop_vfirst_vs2_ready = masku_operand_vs2_valid;
           if (!vinsn_issue.vm) begin 
-            masku_operand_m_ready_o = '1;
+            masku_operand_m_ready = '1;
           end
         end
 
@@ -1097,9 +1135,9 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
           vcpop_slice_cnt_d = '0;
 
           // acknowledge operand a
-          vcpop_vfirst_vs2_ready = masku_operand_vs2_valid_i;
+          vcpop_vfirst_vs2_ready = masku_operand_vs2_valid;
           if (!vinsn_issue.vm) begin 
-            masku_operand_m_ready_o = '1;
+            masku_operand_m_ready = '1;
           end
         end
       end
@@ -1125,8 +1163,8 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
       if (vinsn_issue.vfu == VFU_MaskUnit) begin
         // Is there place in the result queue to write the results?
         // Did we receive the operands?
-        if (!result_queue_full && ((&(masku_operand_a_valid_i | fake_a_valid | masku_operand_vs2_valid_i) &&
-            (!vinsn_issue.use_vd_op || &masku_operand_vs1_valid_i)) || vcomp_vrgath_result_valid)) begin
+        if (!result_queue_full && ((&(masku_operand_a_valid | fake_a_valid | masku_operand_vs2_valid) &&
+            (!vinsn_issue.use_vd_op || &masku_operand_vs1_seq_valid)) || vcomp_vrgath_result_valid)) begin
           if (!(vinsn_issue.op inside {VCOMPRESS, VRGATHER})) begin
             // How many elements are we committing in total?
             // Since we are committing bits instead of bytes, we carry out the following calculation
@@ -1142,8 +1180,8 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
 
             // Acknowledge the operands of this instruction.
             // At this stage, acknowledge only the first operand, "a", coming from the ALU/VMFpu.
-            masku_operand_a_ready_o = masku_operand_a_valid_i;
-            vmsif_vmsof_vmsbf_vs2_ready = (&masku_operand_m_valid_i || vinsn_issue.vm) ? '1 : '0;
+            masku_operand_a_ready = masku_operand_a_valid;
+            vmsif_vmsof_vmsbf_vs2_ready = (&masku_operand_m_valid || vinsn_issue.vm) ? '1 : '0;
 
             if (!vinsn_issue.vm) begin
               unique case (vinsn_issue.vtype.vsew)
@@ -1240,7 +1278,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
                 issue_cnt_d = '0;
             end
           end else if (vinsn_issue.op inside {[VMSBF:VID]}) begin
-            if (&masku_operand_m_valid_i || vinsn_issue.vm || vinsn_issue.op inside {VIOTA, VID}) begin // ZIO PEDRO WHYYYYY vinsn_issue.op inside {VIOTA, VID}
+            if (&masku_operand_m_valid || vinsn_issue.vm || vinsn_issue.op inside {VIOTA, VID}) begin // ZIO PEDRO WHYYYYY vinsn_issue.op inside {VIOTA, VID}
               result_queue_valid_d[result_queue_write_pnt_q] = {NrLanes{1'b1}};
 
               // Increment result queue pointers and counters
@@ -1298,14 +1336,14 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
     ///////////////////////////
     //// Masked Instruction ///
     ///////////////////////////
-    if ((|masku_operand_a_valid_i && !result_queue_full) && (&masku_operand_m_valid_i || vinsn_issue.vm) && vinsn_commit_valid && vinsn_commit.op inside {[VIOTA:VID]}) begin // should be &masku_operand_a_valid_i, but for testing do like this
+    if ((|masku_operand_a_valid && !result_queue_full) && (&masku_operand_m_valid || vinsn_issue.vm) && vinsn_commit_valid && vinsn_commit.op inside {[VIOTA:VID]}) begin // should be &masku_operand_a_valid, but for testing do like this
       // if this is the last beat, commit the result to the scalar_result queue
       commit_cnt_d = commit_cnt_q - (NrLanes << (int'(EW64) - vinsn_commit.vtype.vsew));
       if ((vinsn_commit.vl-commit_cnt_d) >= vinsn_commit.vl) begin
         commit_cnt_d = '0;
       end
     end
-    if ((&masku_operand_a_valid_i || &masku_operand_vs2_valid_i) && (&masku_operand_m_valid_i || vinsn_issue.vm) && vinsn_commit_valid && vinsn_commit.op inside {VMSBF, VMSOF, VMSIF}) begin
+    if ((&masku_operand_a_valid || &masku_operand_vs2_valid) && (&masku_operand_m_valid || vinsn_issue.vm) && vinsn_commit_valid && vinsn_commit.op inside {VMSBF, VMSOF, VMSIF}) begin
       commit_cnt_d = commit_cnt_q - NrLanes * DataWidth;
       if ((vinsn_commit.vl-commit_cnt_d) >= vinsn_commit.vl) begin
         commit_cnt_d = '0;
@@ -1427,7 +1465,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
       read_cnt_d   = '0;
       if (!vinsn_issue.vm) begin
         mask_pnt_d              = '0;
-        masku_operand_m_ready_o = '1;
+        masku_operand_m_ready = '1;
       end
     end
 
