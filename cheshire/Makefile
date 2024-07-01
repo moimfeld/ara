@@ -8,11 +8,17 @@
 
 # Chshire root reposiotry
 MAKEFILE_DIR            := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
-ARA_ROOT								:= $(MAKEFILE_DIR)/..
-BACKREF_CHS_ROOT        ?= ../../cheshire
+ARA_ROOT                := $(MAKEFILE_DIR)/..
+BACKREF_CHS_ROOT        ?= /usr/scratch2/pisoc12/msc24f10/workspace/flow_migration/cheshire
 BACKREF_CHS_XIL_SCRIPTS := $(BACKREF_CHS_ROOT)/target/xilinx/scripts
+
+
+# Set up Bender targets and defines
+# default configuration for Cheshire + Ara is 2_lanes
+ARA_CONFIGURATION       ?= 2_lanes
+include $(ARA_ROOT)/config/$(ARA_CONFIGURATION).mk
 BOARD                   := vcu128
-CUSTOM_BENDER_TARGETS   := -t fpga -t cv64a6_imafdcv_sv39 -t cva6 -t $(BOARD) --define ARA
+CUSTOM_BENDER_TARGETS   := -t fpga -t cv64a6_imafdcv_sv39 -t cva6 -t $(BOARD) --define ARA --define NR_LANES=$(nr_lanes) --define VLEN=$(vlen)
 
 .PHONY: ara-chs-xilinx-$(BOARD) clean
 
