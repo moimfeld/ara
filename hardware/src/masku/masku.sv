@@ -1007,11 +1007,11 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
         mask_queue_cnt_d -= 1;
 
         // Decrement the counter of remaining vector elements waiting to be used
-        if (vldu_mask_ready_i || vstu_mask_ready_i || sldu_mask_ready_i || vinsn_issue.vm || (vinsn_issue.vfu != VFU_MaskUnit)) begin
-          commit_cnt_d = commit_cnt_q - NrLanes * (1 << (int'(EW64) - vinsn_commit.vtype.vsew));
-          if (commit_cnt_q < (NrLanes * (1 << (int'(EW64) - vinsn_commit.vtype.vsew))))
-            commit_cnt_d = '0;
-        end
+        // if (vldu_mask_ready_i || vstu_mask_ready_i || sldu_mask_ready_i || vinsn_issue.vm || (vinsn_issue.vfu != VFU_MaskUnit)) begin
+        commit_cnt_d = commit_cnt_q - NrLanes * (1 << (int'(EW64) - vinsn_commit.vtype.vsew));
+        if (commit_cnt_q < (NrLanes * (1 << (int'(EW64) - vinsn_commit.vtype.vsew))))
+          commit_cnt_d = '0;
+        // end
       end
 
     //////////////////////////////////
